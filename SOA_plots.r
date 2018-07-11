@@ -381,63 +381,6 @@ plotfunIntensity(map_data=cruise_data,
                 legendtitle="Annual growth, percent", 
                 titletext="Arctic hunting - hunters", subtext="2012-2017")  
     
-
-###stop here
-
-
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
-
-
-
-#to plot the intensity at the centroids edit this
-cruisetourism$mid <- sf::st_centroid(cruisetourism$geometry)
-cruisetourism_int <- cruisetourism[!is.na(cruisetourism$Intensity), ]
-
-ggplot(cruisetourism) +
-  geom_sf(colour = "white") +
-  geom_sf(data=cruisetourism_int, aes(geometry = mid, size = Intensity), show.legend = "point") +
-  scale_size_area(labels = scales::comma, breaks=c(1000, 5000, 100000, 1000000))
-
-#plot
-ggplot(cruisetourism) +
-  geom_sf(data=borders, fill="white", color="grey90") + #add borders
-  geom_sf(data=amap, fill="grey95", color=NA) + #add amap
-  geom_sf(data=cruisetourism, aes(fill=AnnGrowth_12_17), color=NA, show.legend=TRUE) +
-  #scale_fill_viridis_c(option="magma", direction=-1, 
-  name="Annual passengers, thousand", labels = scales::comma,
-na.value="grey80") +
-  #labs(x = NULL, y = NULL, 
-  # title = "Arctic cruise tourism",
-  #subtitle = "",
-  #caption = "")
-  coord_sf(crs = st_crs(cruisetourism), datum = NA) + #drop graticules
-  theme(panel.grid=element_blank()) 
- 
-
-scale_fill_distiller(palette = "RdBu"
-                     , limits = c(-1,1)*max(abs(grid$z))
-)
-
-
-
-
-
-
-
-
 #####################
 #POPULATION ----
 #read in template
@@ -483,9 +426,9 @@ plotfunGrowth(map_data=popn_data,
               titletext="Arctic population", subtext="2012-2017")
 
 #####################
-#OIL AND GAS ----
+#OIL AND GAS All----
 #read in template
-template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas2")
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas1")
 #read in table
 tbl <- read.csv(paste0(wd, "/Tables/Oilandgas_wells_summarystats.csv"))
 #manipulate table
@@ -496,8 +439,8 @@ wells_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
 #plot
 plotfunIntensity(map_data=wells_data, 
                  mapped_col="Intensity", 
-                 mycols = rev(viridisLite::magma(8)[2:7]),
-                 pretty_breaks=c(100, 500, 1000, 5000), ndecimals=0, 
+                 mycols = rev(viridisLite::magma(8)[2:8]),
+                 pretty_breaks=c(50, 100, 500, 1000, 5000), ndecimals=0, 
                  legendtitle="Number of wells drilled", 
                  titletext="Arctic Oil and Gas", subtext="Intensity", caption="Any development or exploration wells drilled after 1960")
 plotfunGrowth(map_data=wells_data, 
@@ -505,22 +448,379 @@ plotfunGrowth(map_data=wells_data,
               mycols = c("grey70",rev(viridisLite::viridis(7)[3:6])),
               pretty_breaks=c(1, 3, 5, 7), ndecimals=3, 
               legendtitle="Annual growth, percent", 
-              titletext="Arctic Oil and Gas", subtext="All years")
+              titletext="Arctic Oil and Gas", subtext="All wells All years")
+plotfunGrowth(map_data=wells_data, 
+              mapped_col="AnnGrowth_97_02", 
+              mycols = c(rev(viridisLite::viridis(8)[4:8])),
+              pretty_breaks=c(-1, 3, 5, 7, 15), ndecimals=1, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic Oil and Gas", subtext="All wells 2002-2007")
 plotfunGrowth(map_data=wells_data, 
               mapped_col="AnnGrowth_02_07", 
-              mycols = c("grey30","grey50", "grey70",rev(viridisLite::viridis(7)[3:6])),
-              pretty_breaks=c(-3, -0.5, 0.5, 1, 3), ndecimals=3, 
+              mycols = c(rev(viridisLite::viridis(8)[1:8])),
+              pretty_breaks=c(-7, -5, -1), ndecimals=1, 
               legendtitle="Annual growth, percent", 
-              titletext="Arctic Oil and Gas", subtext="2002-2007")
+              titletext="Arctic Oil and Gas", subtext="All wells 2002-2007")
 plotfunGrowth(map_data=wells_data, 
               mapped_col="AnnGrowth_07_12", 
-              mycols = c("grey30","grey50", "grey70",rev(viridisLite::viridis(7)[3:6])),
-              pretty_breaks=c(-3, -0.5, 0.5, 1, 3), ndecimals=3, 
+              mycols = c(rev(viridisLite::viridis(8)[1:8])),
+              pretty_breaks=c(-7, -5, -1, 1, 5, 7), ndecimals=3, 
               legendtitle="Annual growth, percent", 
-              titletext="Arctic Oil and Gas", subtext="2007-2012")
+              titletext="Arctic Oil and Gas", subtext="All wells 2007-2012")
 plotfunGrowth(map_data=wells_data, 
               mapped_col="AnnGrowth_12_17", 
-              mycols = c("grey30","grey50", "grey70",rev(viridisLite::viridis(7)[4:6])),
-              pretty_breaks=c(-3, -0.5, 0.5, 1), ndecimals=3, 
+              mycols = c(rev(viridisLite::viridis(8)[1:8])),
+              pretty_breaks=c(-7, -5, -1, 1), ndecimals=3, 
               legendtitle="Annual growth, percent", 
-              titletext="Arctic Oil and Gas", subtext="2012-2017")
+              titletext="Arctic Oil and Gas", subtext="All wells 2012-2017")
+
+########################
+#OIL AND GAS Exploration----
+#manipulate table
+tbl_ed <- tbl[tbl$Metric=="Exploration", ] #both development and exploration wells
+#merge table to sf
+wells_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+
+plotfunIntensity(map_data=wells_data, 
+                 mapped_col="Intensity", 
+                 mycols = rev(viridisLite::magma(8)[4:8]),
+                 pretty_breaks=c(50, 100, 500), ndecimals=0, 
+                 legendtitle="Number of wells drilled", 
+                 titletext="Arctic Oil and Gas", subtext="Exploration Intensity", caption="Exploration wells drilled after 1960")
+
+########################
+#OIL AND GAS Development----
+tbl_ed <- tbl[tbl$Metric=="Development", ] #both development and exploration wells
+#merge table to sf
+wells_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+
+plotfunIntensity(map_data=wells_data, 
+                 mapped_col="Intensity", 
+                 mycols = rev(viridisLite::magma(8)[2:8]),
+                 pretty_breaks=c(50, 100, 500, 1000, 5000), ndecimals=0, 
+                 legendtitle="Number of wells drilled", 
+                 titletext="Arctic Oil and Gas", subtext="Development Intensity", caption="Development wells drilled after 1960")
+
+#######################
+#OIL AND GAS Time series----
+#Exploration and Development across time
+#read in table
+tbl <- read.csv(paste0(wd, "/Tables/Oilandgas_wells_long.csv"), fileEncoding = "UTF-8-BOM")
+tbl2 <- tbl[tbl$Region != "All", ] %>% droplevels()
+tbl3 <- tbl2 %>% filter(Metric=="All") %>% group_by(Country, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
+
+tbl3$Country <- factor(tbl3$Country, levels=c("Alaska", "Norway", "Canada", "United Kingdom", "Greenland"))
+
+#timeseries By country
+p <- ggplot(tbl3, aes(x=year, y=nwells, fill=Country)) +
+  geom_area(stat='identity', position='identity', alpha=0.6) +
+  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Wells spudded in each country") +
+  theme_minimal() +
+  theme(legend.position="bottom") +
+  scale_fill_manual(values = rev(viridisLite::magma(7)[2:6]),
+                    name = element_blank(), 
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30/length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = F, label.position = "bottom"))
+ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries_bycountry.png"), p)
+
+#exploration vs development time series
+tbl4 <- tbl2 %>% filter(Metric!="All") %>% group_by(Metric, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
+
+p <- ggplot(tbl4, aes(x=year, y=nwells, fill=Metric)) +
+  geom_area(stat='identity', position='identity', alpha=0.5) +
+  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Wells spudded") +
+  theme_minimal() +
+  theme(legend.position=c(0.22, 0.80)) +
+  scale_fill_manual(values = viridisLite::magma(4)[2:3],
+                    name = element_blank(),
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30 / length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = T, label.position = "bottom"))
+ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries.png"), p)
+
+#Marine timeseries
+#dropped norwegian north sea
+tbl5 <- tbl2 %>% filter(Metric!="All" & Region %in% c("Labrador offshore", "Norwegian Sea", 
+                                                      "Barents Sea", "Offshore", "West Bering Sea", "Chukchi Sea", "Beaufort Sea")) %>% 
+            group_by(Metric, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
+
+p <- ggplot(tbl5, aes(x=year, y=nwells, fill=Metric)) +
+  geom_area(stat='identity', position='stack', alpha=0.5) +
+  geom_line(tbl6, aes(x=year, y=nwells)) +
+  coord_cartesian(xlim=c(1970, 2017), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(1970, 2010, 10)) +
+  xlab("Year") + ylab("Wells spudded") +
+  theme_minimal() +
+  theme(legend.position='bottom') +
+  scale_fill_manual(values = (viridisLite::viridis(4)[2:3]),
+                    name = element_blank(),
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30 / length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = T, label.position = "bottom"))
+
+ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries_marine.png"), p)
+
+
+#####################
+#FISHING ----
+#read in template
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_fishing")
+#read in table
+tbl <- read.csv(paste0(wd, "/Tables/Fishing_summarystats.csv"))
+#manipulate table
+#NA
+#merge table to sf
+fishing_data <- merge(template, tbl, by=c("Region"), all.x=TRUE)
+fishing_data$Intensity_thou <- fishing_data$Intensity/1000
+
+#plot
+plotfunIntensity(map_data=fishing_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[3:7]),
+                 pretty_breaks=c(1, 10, 100, 1000), ndecimals=0, 
+                 legendtitle="Annual catch, thousands", 
+                 titletext="Arctic fishing catch", subtext="Intensity")
+plotfunGrowth(map_data=fishing_data, 
+              mapped_col="AnnGrowth_start_end", 
+              mycols = c("grey30","grey50", "grey70", rev(viridisLite::viridis(7)[3:6])),
+              pretty_breaks=c(-2, -1, 0, 1, 2, 3), ndecimals=3, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic fishing catch", subtext="1950-2014")
+plotfunGrowth(map_data=fishing_data, 
+              mapped_col="AnnGrowth_02_07", 
+              mycols = c("grey 10", "grey30","grey50", "grey70", rev(viridisLite::viridis(7)[4:6])),
+              pretty_breaks=c(-10, -5, -2, 2, 5, 10), ndecimals=3, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic fishing catch", subtext="2002-2007")
+plotfunGrowth(map_data=fishing_data, 
+              mapped_col="AnnGrowth_07_12", 
+              mycols = c("grey30", "grey50", "grey70", rev(viridisLite::viridis(7)[4:6])),
+              pretty_breaks=c(-5, -2, 2, 5, 10), ndecimals=3, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic fishing catch", subtext="2007-2012")
+plotfunGrowth(map_data=fishing_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c("grey 10", "grey30","grey50", "grey70", rev(viridisLite::viridis(7)[3:6])),
+              pretty_breaks=c(-10, -5, -2, 2, 5, 10), ndecimals=3, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic fishing catch", subtext="2012-2017")
+
+
+#####################
+#SHIPPING - ALL ----
+#read in template
+template <- read_sf(dsn=datawd, layer="EEZ_plus_highseas_noland")
+#read in table
+tbl <- read.csv(paste0(wd, "/Tables/Shipping_distance_summarystats.csv"))
+#manipulate table
+tbl_ed <- tbl[tbl$Metric == "All", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[2:7]),
+                 pretty_breaks=c(1, 2.5, 10, 25, 50), ndecimals=2, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Intensity All shipping")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[3:8]),
+              pretty_breaks=c(-5, -2), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="All shipping 2012-2017")
+#plotfunGrowth(map_data=shipping_data, 
+           #   mapped_col="AnnGrowth_12_17", 
+             # mycols = c(viridisLite::viridis(8)[2:7]),
+            #  pretty_breaks=c(-6, -5, -4, -3, -2), ndecimals=2, 
+            #  legendtitle="Annual growth, percent", 
+            #  titletext="Arctic shipping distance", subtext="All shipping 2012-2017")
+
+#SHIPPING - Goods transport ----
+#manipulate table
+tbl_ed <- tbl[tbl$Metric == "Goods transport", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[3:8]),
+                 pretty_breaks=c(0.1, 1, 2.5, 10, 25), ndecimals=1, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Intensity Goods transport")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[2:7]),
+              pretty_breaks=c(-10, -5, -2, 2, 10), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="Goods transport 2012-2017")
+
+#SHIPPING - Oil and gas ----
+tbl_ed <- tbl[tbl$Metric == "Oil or gas tanker", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[4:7]),
+                 pretty_breaks=c(1, 2.5, 10), ndecimals=3, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Intensity Oil or gas transport")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[3:8]),
+              pretty_breaks=c(-10, -2, 2, 10, 30), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="Oil or gas 2012-2017")
+
+#SHIPPING - Fishing ----
+tbl_ed <- tbl[tbl$Metric == "Fishing", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+shipping_data[is.infinite(shipping_data$AnnGrowth_12_17)==TRUE, "AnnGrowth_12_17"] <- NA
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[4:8]),
+                 pretty_breaks=c(0.1, 1, 2.5, 10), ndecimals=3, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Intensity Fishing")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[2:6]),
+              pretty_breaks=c(-10, -5, -2, 2), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="Fishing 2012-2017")
+
+#SHIPPING - Passenger ships ----
+tbl_ed <- tbl[tbl$Metric == "Passenger", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[4:8]),
+                 pretty_breaks=c(0.1, 1, 2.5, 10), ndecimals=3, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Intensity Passengers vessels")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[2:7]),
+              pretty_breaks=c(-10, -5, -2, 2, 10), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="Passenger vessels 2012-2017")
+
+
+#SHIPPING - Other ----
+tbl_ed <- tbl[tbl$Metric == "Other", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/100000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[3:8]),
+                 pretty_breaks=c(0.1, 1, 2.5, 10, 25), ndecimals=1, 
+                 legendtitle=expression(Annual~shipping~distance~(x~10^{5}~nm)), 
+                 titletext="Arctic shipping distance", subtext="Other transport")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[4:8]),
+              pretty_breaks=c(-2, 2, 10, 30), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping distance", subtext="Other 2012-2017")
+
+#SHIPPING - Volume goods ----
+#read in template
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_shippingvol")
+#read in table
+tbl <- read.csv(paste0(wd, "/Tables/Shipping_volume_summarystats.csv"))
+#manipulate table
+tbl_ed <- tbl[tbl$Metric == "goods", ]
+#merge table to sf
+shipping_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
+shipping_data$Intensity_thou <- shipping_data$Intensity/1000000
+
+#plot
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="Intensity_thou", 
+                 mycols = rev(viridisLite::magma(8)[3:8]),
+                 pretty_breaks=c(1, 5, 10, 25), ndecimals=1, 
+                 legendtitle=expression(Annual~shipping~volume~(x~10^{6}~ton)), 
+                 titletext="Arctic shipping volume", subtext="Intensity goods volume")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_12_17", 
+              mycols = c(viridisLite::viridis(8)[1:8]),
+              pretty_breaks=c(-20, -10, -5, -2, 2, 10), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping volume", subtext="Goods volume 2012-2017")
+plotfunGrowth(map_data=shipping_data, 
+              mapped_col="AnnGrowth_07_12", 
+              mycols = c(viridisLite::viridis(8)[1:8]),
+              pretty_breaks=c(-20, -10, -5, -2, 2, 10), ndecimals=2, 
+              legendtitle="Annual growth, percent", 
+              titletext="Arctic shipping volume", subtext="Goods volume 2007-2012")
+
+#######################################################
+#plots with centroids ----
+#to plot the intensity at the centroids edit this
+cruisetourism$mid <- sf::st_centroid(cruisetourism$geometry)
+cruisetourism_int <- cruisetourism[!is.na(cruisetourism$Intensity), ]
+
+ggplot(cruisetourism) +
+  geom_sf(colour = "white") +
+  geom_sf(data=cruisetourism_int, aes(geometry = mid, size = Intensity), show.legend = "point") +
+  scale_size_area(labels = scales::comma, breaks=c(1000, 5000, 100000, 1000000))
+
+#plot
+ggplot(cruisetourism) +
+  geom_sf(data=borders, fill="white", color="grey90") + #add borders
+  geom_sf(data=amap, fill="grey95", color=NA) + #add amap
+  geom_sf(data=cruisetourism, aes(fill=AnnGrowth_12_17), color=NA, show.legend=TRUE) +
+  #scale_fill_viridis_c(option="magma", direction=-1, 
+  name="Annual passengers, thousand", labels = scales::comma,
+na.value="grey80") +
+  #labs(x = NULL, y = NULL, 
+  # title = "Arctic cruise tourism",
+  #subtitle = "",
+  #caption = "")
+  coord_sf(crs = st_crs(cruisetourism), datum = NA) + #drop graticules
+  theme(panel.grid=element_blank()) 
+
+
+scale_fill_distiller(palette = "RdBu"
+                     , limits = c(-1,1)*max(abs(grid$z))
+)
+
+

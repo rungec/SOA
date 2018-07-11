@@ -61,7 +61,7 @@ write_excel_csv(tur_all, "Tables/All_tourism_long.csv")
 
 #Oil and gas
 #wells
-wells <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="oilandgas_wells", range="A1:CJ46")
+wells <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="oilandgas_wells", range="A1:CJ49")
 wells$Country <- as.factor(wells$Country)
 wells$Region <- as.factor(wells$Region)
 wells$Metric <- as.factor(wells$Type)
