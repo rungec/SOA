@@ -1,0 +1,206 @@
+---
+title: "State of Arctic models"
+output: html_document
+---
+  
+```{r packages and data, include=FALSE}
+require(tidyverse)
+require(lubridate)
+require(nlme) #for mixed effects models
+
+#set directories
+wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Tables"
+
+#Industries
+industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells")
+
+#load and merge files
+alldat <- lapply(industries, function(i) {
+    
+    dat <- read.csv(paste0(wd, "/", i, "_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+      
+      if(i == "Shipping_distance"){ 
+        dat <- dat %>% filter(Country!="Total") %>% 
+                  group_by(Country, Region, year) %>% 
+                  summarise(value=sum(value, na.rm=TRUE)) %>% #sum shipping distance across all types of shipping
+                  mutate(Metric="nautical miles sailed all shipcats")
+      } 
+    
+      if(i == "Fishing"){ 
+        dat <- dat %>% filter(Region!="Total") 
+      } 
+      
+      if(i == "Cruise_tourism"){ 
+      #Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
+      #We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers).
+      #adjust murmansk
+      dat$value[dat$Region=="Murmansk"] <-  dat$value[dat$Region=="Murmansk"]*437.4
+      dat[dat$Region=="Murmansk", "Metric"] <- "Passengers"
+      #drop other metrics
+      dat <- dat %>% filter(Metric=="Passengers")
+      } 
+      
+      if(i == "Hunters") { 
+        #drop other types of hunting
+        dat <- dat %>% filter(Metric %in% c("All hunting/trapping/fishing licenses", "Number of hunters who paid game management fees", "Registered hunters", "Paid hunting permits", "Sports hunters"))
+        #drop extra column
+        dat <- dat[, which(!names(dat)=="Region_original")]
+      }
+      
+      if(i == "Oilandgas_wells") {
+        #remove duplicated data: drop Region="all" - this is a sum of onshore and offshore; and purpose="all" - this is sum of exploration & development
+        dat <- dat %>% filter(Region!="All" & Purpose!="All")
+        #split Industry into exploration and development
+        dat$Industry <- paste("Oilandgas", dat$Type, sep="_")
+        #drop extra columns
+        dat <- dat[, which(!names(dat) %in% c("Type", "Purpose"))]
+        #fix metric column
+        dat$Metric <- "n_wells"
+      } else {
+        dat$Industry <- i
+      }
+      
+    return(data.frame(dat))
+
+})
+alldat <- bind_rows(alldat)
+alldat$value[alldat$value==0] <- NA #replace zeros with NA, otherwise anngrowthfun returns Inf
+alldat$Country[alldat$Country %in% c("Svalbard & Jan Mayen", "Svalbard and Jan Mayen")] <- "Svalbard"
+alldat <- alldat %>% mutate_at(c("Country", "Region", "Industry"), funs(factor))
+
+```
+
+We calculate the annual growth rate in X over start years (y0) value (Xy0)
+annual growth rate = (Xy1/Xy0)^(1/nyrs) -1
+in the output table, annual growth is assigned to final year (y1) - so annual growth between 1999 and 2003, is assigned to 2003.
+Where no activity happens for several years, the annual growth rate is calculated from the two time points when activity occurred
+(we ignore the years when growth=0)
+I did this because (Xy1/Xy0)^(1/nyrs) -1 evaluates to Inf when Xy0=0, which can't be modelled.
+
+
+```{r growthrates}
+  #calculate annual growth
+
+anngrowthdf <- alldat %>%  filter(!is.na(value)) %>% #drop years missing data
+    group_by(Industry, Country, Region, Metric)  %>%
+    arrange(year) %>% #arrange by ascending years
+    mutate(nyr = year - lag(year, 1)) %>% #number of years between subsequent datapoints
+    mutate(anngrowth = {value/lag(value,1)}^(1/nyr) - 1 ) %>% #annual growth between those years
+    drop_na() %>% droplevels()
+  
+  head(anngrowthdf)
+ 
+```
+
+Next we calculate the intensity of each industry, using the mean value across 2012-2017.
+we use a spread of years rather than a single year to account for interannual variation and missing data.
+
+```{r intensities} 
+
+intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("Oilandgas_Development", "Oilandgas_Exploration")) %>% #drop years missing data
+  filter(year %in% 2012:2017) %>% 
+  group_by(Industry, Country, Region, Metric)  %>%
+  summarise(intensity=mean(value)) 
+```
+
+We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
+
+```{r fixintensity1}
+oilintensity <- alldat %>%  filter(!Industry %in% c("Oilandgas_Development", "Oilandgas_Exploration")) %>% 
+  filter(year %in% 1960:2017) %>% 
+  group_by(Industry, Country, Region, Metric)  %>%
+  summarise(intensity=sum(value, na.rm=TRUE))
+
+#replace oil and gas values with these new values
+intensitydf <- bind_rows(intensitydf, oilintensity)
+intensitydf <- intensitydf %>% drop_na() %>% droplevels()
+
+```
+
+Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
+We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This gives higher than expected cruise passengers - same intensity as Tromsø...
+```{r, include=FALSE}
+alldat %>% filter(Industry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
+```
+
+Let's plot the data
+
+##Annual growth rates
+```{r plot growthrates, echo=FALSE}
+
+levels(anngrowthdf$Industry)
+
+anngrowthdf %>% filter(!Industry %in% c("Fishing", "Shipping_distance")) %>%
+  ggplot(aes(x=year, y=anngrowth, color=Country)) +
+  geom_point() +
+  coord_cartesian(xlim = c(1997, 2017)) +
+  facet_wrap(~ Industry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+anngrowthdf %>% filter(Industry=="Fishing") %>%
+  ggplot(aes(x=year, y=anngrowth, color=Region)) +
+  geom_point() +
+  coord_cartesian(xlim = c(1997, 2017)) +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+anngrowthdf %>% filter(Industry=="Shipping_distance") %>%
+  ggplot(aes(x=year, y=anngrowth, color=Region)) +
+  geom_point() +
+  coord_cartesian(xlim = c(2012, 2017)) +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+```
+##Intensities
+```{r plot intensities, echo=FALSE}
+intensitydf %>% filter(!Industry %in% c("Fishing", "Shipping_distance")) %>%
+ggplot(aes(x=Country, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ Industry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Fishing") %>%
+ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ Industry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Shipping_distance") %>%
+ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ Industry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+```  
+
+##Models
+Is the annual growth significantly different from zero? Let's model it.
+
+```{r models}
+
+#starting with a simple generalized linear model
+# no interaction, so we expect the same growth rate in each country
+mod1 <- glm(anngrowth ~ year + Industry + Country, data=anngrowthdf)
+summary(mod1)
+plot(mod1)
+
+#the residuals are messy, so clearly this is not a good assumption, and we would expect different growth rates in each country
+#(influenced by policy, marketing, resource availability, economic & demographic conditions)
+#Let's rerun a model with an interaction between year and country
+mod2 <- glm(anngrowth ~ year*Country, data=anngrowthdf)
+summary(mod2)
+plot(mod2)
+
+#We want to know if there are global trends in Arctic industries, so let's include country as a random effect.
+#mod3 <- lme(anngrowth ~ year + random=~1|Country, data=anngrowthdf, method='REML') #plus country as random effect
+#mod4 <- gls(anngrowth ~ year, data=anngrowthdf, method='REML') #fixed effects
+#anova(mod3, mod4)
+
+```
+
+
