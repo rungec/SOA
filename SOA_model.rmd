@@ -4,6 +4,7 @@ output: html_document
 ---
   
 ```{r packages and data, include=FALSE}
+require(knitr)
 require(tidyverse)
 require(lubridate)
 require(nlme) #for mixed effects models
@@ -12,6 +13,7 @@ require(modelr)
 require(gridExtra) #for grid.arrange
 require(broom) #for do and tidy
 require(ggfortify) #for autoplot
+require(pander) #for pander table
 
 #set directories
 wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
@@ -274,7 +276,8 @@ interaction = growth ~ year * country
 
 ```{r models, echo=FALSE, warning=FALSE}
 #set up data
-anngrowthdf$Region2 <- as.character(anngrowthdf$Country)
+#anngrowthdf$Region2 <- as.character(anngrowthdf$Country)
+anngrowthdf$Region2 <- as.character(anngrowthdf$Region)
 anngrowthdf$Region2[anngrowthdf$subIndustry %in% c("Fishing", "Shipping_distance")] <- as.character(anngrowthdf$Region[anngrowthdf$subIndustry %in% c("Fishing", "Shipping_distance")])
 anngrowthdf$Region2 <- as.factor(anngrowthdf$Region2)
 
@@ -283,8 +286,8 @@ dfmods <- anngrowthdf %>%
   filter(!subIndustry %in% c("Fishing", "Shipping_distance")) %>%
   filter(year>1997 & year<2018) %>%
   group_by(subIndustry) %>%
-  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Norway"), data=.), 
-     intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Norway"), data=.),
+  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Iceland"), data=.), 
+     intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Iceland"), data=.),
      simplemod = lm(anngrowth ~ I(year-2017), data=.))  
 #run the models across the industries fishing
 dfmods_fish <- anngrowthdf %>% 
@@ -299,7 +302,7 @@ dfmods_ship <- anngrowthdf %>%
   filter(subIndustry=="Shipping_distance") %>%
   filter(year>1997 & year<2018) %>%
   group_by(subIndustry) %>%
-  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="NorwayEEZ"), data=.), 
+  do(basemod =lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="NorwayEEZ"), data=.), 
      intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="NorwayEEZ"), data=.),
      simplemod = lm(anngrowth ~ I(year-2017), data=.)) 
 
@@ -328,9 +331,43 @@ knitr::kable(overallmodelfit, caption="Model selection")
 
 ```
 
-```{r models_old, echo=FALSE, warning=FALSE}
+### Plot growth against year for the entire Arctic.
+
+```{r models_simple, echo=FALSE, warning=FALSE}
+for(i in levels(anngrowthdf$subIndustry)) {
+#run the models across the industries
+  currdat <- anngrowthdf %>% 
+    filter(year>1997 & year<2018) %>%
+    filter(subIndustry==i)
+  currmod <- lm(anngrowth ~ I(year-2017), currdat)
+  pander(currmod)
+  currdf <- augment(currmod)
+    names(currdf)[2] <- c("year")
+      #plot fitted
+      p1 <- currdf %>%
+        ggplot(aes(year, anngrowth)) +
+        geom_point() +
+        geom_abline(intercept=coefficients(currmod)[1], slope=coefficients(currmod)[2]) +
+        ggtitle(sprintf("Linear trend %s", i)) +
+        theme_minimal() +
+        theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+    p2 <- currdf %>% 
+       ggplot(aes(year, .resid)) +
+        geom_point() +
+        ggtitle("Remaining pattern") +
+        theme_minimal() +
+        theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+    grid.arrange(p1, p2, ncol=2)
+}
+
+
+```
+
+### Plot growth against year, including region as an additive term.
+
+```{r models_base, echo=FALSE, warning=FALSE}
 printfun <- function(data){
-        print(summary(data[[2]][[1]]))
+        pander(data[[2]][[1]])
         #print(summary(data[[3]][[1]]))
         print(autoplot(data[[2]][[1]], which=c(1:3)))
         print(autoplot(data[[2]][[1]], which=c(5))  + theme(axis.text.x  = element_text(angle=90, vjust=0.5)))
@@ -437,8 +474,8 @@ for(i in levels(anngrowthdf$subIndustry)) {
 }
 ```
 
-
-
+NEXT STEPS:
+drop outliers
 
 
 ```{r eval=FALSE, include=FALSE}
