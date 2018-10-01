@@ -4,7 +4,7 @@ require(ggplot2)
 require(readxl)
 
 
-wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Tables"
+wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 setwd(wd)
 
 
