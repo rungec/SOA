@@ -10,9 +10,11 @@ require(nlme) #for mixed effects models
 require(broom) #for nested modelling
 require(modelr)
 require(gridExtra) #for grid.arrange
+require(broom) #for do and tidy
+require(ggfortify) #for autoplot
 
 #set directories
-wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Tables"
+wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 
 #Industries
 industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells")
@@ -111,13 +113,14 @@ write_excel_csv(alldat, "All_industries_long.csv") #for fileEncoding = "UTF-8-BO
 ```
 
 We calculate the annual growth rate in X over start years (y0) value (Xy0)  
-annual growth rate = (Xy1/Xy0)^(1/nyrs) -1  
+annual growth rate = {log10(Xy1+zif) - log10(Xy0+zif)}*(1/nyrs)
+
 in the output table, annual growth is assigned to final year (y1) - so annual growth between 1999 and 2003, is assigned to 2003.  
 Where data is missing for several years, the annual growth rate is calculated from the two time points we have data for. Note that we don't include the no-data points in the model i.e. perform no interpolation for missing data.
 
 ### Exceptions:
 #### Shipping distance: 
-In some parts of the Arctic there is no shipping in certain years (e.g. Davis Sea in 2012). I added a small constant (1) to these numbers, because (Xy1/Xy0)^(1/nyrs) -1 evaluates to Inf when Xy0=0, which can't be modelled.
+In some parts of the Arctic there is no shipping in certain years (e.g. Davis Sea in 2012). I added a small constant (zif) to these numbers, because log10(0) evaluates to -Inf, which can't be modelled.
 
 #### Oil and gas:
 We calculate annual growth in oil and gas from the cumulative number of wells drilled across time, as activity is intermittent (lots of years with no wells drilled). This gives growth rates of zero in years with no activity, rather than growth rates of Inf. This can be loosely taken as a measure of the growth (both rise and fall) in the industry across time.
@@ -125,6 +128,7 @@ We calculate annual growth in oil and gas from the cumulative number of wells dr
 
 ```{r growthrates}
   #calculate annual growth
+zif=0.0000001
 
 alldat <- read.csv("All_industries_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
@@ -132,7 +136,7 @@ anngrowthdf <- alldat %>%  filter(!is.na(value)) %>% #drop years missing data
     group_by(Industry, subIndustry, Country, Region, Metric)  %>%
     arrange(year) %>% #arrange by ascending years
     mutate(nyr = year - lag(year, 1)) %>% #number of years between subsequent datapoints
-    mutate(anngrowth = {value/lag(value,1)}^(1/nyr) - 1 ) %>% #annual growth between those years
+    mutate(anngrowth = {log(value+zif) -log(lag(value,1)+zif)}*(1/nyr))  %>% #annual growth between those years
     drop_na() %>% droplevels()
 
 write_excel_csv(anngrowthdf, "All_industries_annualgrowth.csv") #for fileEncoding = "UTF-8-BOM"
@@ -179,7 +183,7 @@ Let's plot the data.
 I removed one datapoint for Shipping_distance in Davis Strait, where growth rate in 2002-2013 was 5180% (up from no shipping in 2012 to 518nm in 2013)  
 Oil and gas development shows a high growth rate in 2005 for the Barent's Sea, due to the start of production (up from 1 well in 2004 to 9 in 2005)  
 
-```{r plot growthrates, echo=FALSE}
+```{r plot growthrates, echo=FALSE, warning=FALSE}
 
 levels(anngrowthdf$subIndustry)
 
@@ -228,7 +232,7 @@ Norway = Registered hunters,
 Finland & Sweden = Paid hunting permits,  
 No data for Russia, Faroes, Iceland, Canada.  
 
-```{r plot intensities, echo=FALSE}
+```{r plot intensities, echo=FALSE, warning=FALSE}
 intensitydf %>% filter(Industry=="Tourism") %>%
 ggplot(aes(x=Country, y=intensity)) +
   geom_col() +
@@ -262,86 +266,141 @@ ggplot(aes(x=Region, y=intensity)) +
 ## Models
 It seems like the inter-annual variation is high, and no trends are immediately obvious in any industry.  
 Is the annual growth significantly different from zero? Let's model it.  
-If it is the growth rate increasing/decreasing across time we would expect slope to be significant.  
-If the industry is consistently growing or getting smaller, we expect intercept to be significant.   
-(Right?) 
 
-We would expect different trends in each country (influenced by policy, marketing, resource availability, economic & demographic conditions etc).  
-Let's run a generalized linear model with an interaction between year and country
+First we run a very simple model of growth ~ year. We might expect different trends in each country (influenced by policy, marketing, resource availability, economic & demographic conditions etc), so let's also run a linear model with country base model of growth ~ year + country. Finally, we explore an interaction between year and country and see if it outperforms the base model.
+simple  = growth ~ year
+base    = growth ~ year + country
+interaction = growth ~ year * country
 
-```{r models, echo=FALSE}
-
-interaction_model <- function(df){
-    glm(anngrowth ~ year*Region2, data=df)
-}
-
+```{r models, echo=FALSE, warning=FALSE}
 #set up data
 anngrowthdf$Region2 <- as.character(anngrowthdf$Country)
 anngrowthdf$Region2[anngrowthdf$subIndustry %in% c("Fishing", "Shipping_distance")] <- as.character(anngrowthdf$Region[anngrowthdf$subIndustry %in% c("Fishing", "Shipping_distance")])
 anngrowthdf$Region2 <- as.factor(anngrowthdf$Region2)
 
 #run the models across the industries
+dfmods <- anngrowthdf %>% 
+  filter(!subIndustry %in% c("Fishing", "Shipping_distance")) %>%
+  filter(year>1997 & year<2018) %>%
+  group_by(subIndustry) %>%
+  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Norway"), data=.), 
+     intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Norway"), data=.),
+     simplemod = lm(anngrowth ~ I(year-2017), data=.))  
+#run the models across the industries fishing
+dfmods_fish <- anngrowthdf %>% 
+  filter(subIndustry=="Fishing") %>%
+  filter(year>1997 & year<2018) %>%
+  group_by(subIndustry) %>%
+  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Barents Sea"), data=.), 
+     intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Barents Sea"), data=.),
+     simplemod = lm(anngrowth ~ I(year-2017), data=.))  
+#run the models across the industries shipping
+dfmods_ship <- anngrowthdf %>% 
+  filter(subIndustry=="Shipping_distance") %>%
+  filter(year>1997 & year<2018) %>%
+  group_by(subIndustry) %>%
+  do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="NorwayEEZ"), data=.), 
+     intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="NorwayEEZ"), data=.),
+     simplemod = lm(anngrowth ~ I(year-2017), data=.)) 
+
+#check if the interaction model performs better
+overallmodelfit <- bind_rows(glance(dfmods, simplemod), glance(dfmods, basemod), glance(dfmods, intmod)) %>%
+                   bind_cols(data.frame(model = rep(c("simple", "base", "interaction"), each=nrow(dfmods)))) %>%
+                  arrange(subIndustry)
+overallmodelfit_fish <- bind_rows(glance(dfmods_fish, simplemod), glance(dfmods_fish, basemod), glance(dfmods_fish, intmod)) %>%
+                   bind_cols(data.frame(model = rep(c("simple", "base", "interaction"), each=nrow(dfmods_fish))))
+overallmodelfit_ship <- bind_rows(glance(dfmods_ship, simplemod), glance(dfmods_ship, basemod), glance(dfmods_ship, intmod)) %>%
+                   bind_cols(data.frame(model = rep(c("simple", "base", "interaction"), each=nrow(dfmods_ship))))
+overallmodelfit <- bind_rows(overallmodelfit, overallmodelfit_fish, overallmodelfit_ship)
+
+knitr::kable(overallmodelfit, caption="Model selection")
+#write.table(overallmodelfit, paste0(dirname(wd), "/Model/Allindustries_modelfit.csv"))
+
+#print model summary
+#lapply(dfmods$basemod, summary)
+#lapply(dfmods$intmod, summary)
+#modelsummary_base <- dfmods %>% tidy(basemod)
+#modelsummary_int <- dfmods %>% tidy(intmod)
+
+#set up the prediction values
+#dfmodpreds_base <- dfmods %>% augment(basemod)
+#dfmodpreds_int <- dfmods %>% augment(intmod)
+
+```
+
+```{r models_old, echo=FALSE, warning=FALSE}
+printfun <- function(data){
+        print(summary(data[[2]][[1]]))
+        #print(summary(data[[3]][[1]]))
+        print(autoplot(data[[2]][[1]], which=c(1:3)))
+        print(autoplot(data[[2]][[1]], which=c(5))  + theme(axis.text.x  = element_text(angle=90, vjust=0.5)))
+}
+
 for(i in levels(anngrowthdf$subIndustry)) {
   print(i)
-  #subset data
-  currdf <- anngrowthdf %>%
-    filter(year>1997 & year<=2018) %>%
-    filter(subIndustry==i) 
-  #run model
-  curr_mod <- interaction_model(currdf)
-  print(summary(curr_mod))
-  
   #plot model
   if(i %in% c("Fishing", "Shipping_distance")) {
+  
+    #subset data
+    if(i=="Fishing"){
+      currdf <- dfmods_fish 
+      #print models
+      printfun(currdf)
+      #predict models
+      currdf <- dfmods_fish %>% augment(basemod)
+        names(currdf)[1:4] <- c("subIndustry", "anngrowth", "year", "Region2")  
+    } else if (i =="Shipping_distance"){
+      currdf <- dfmods_ship  
+      #print models
+      printfun(currdf)
+      #predict models
+      currdf <- dfmods_ship %>% augment(basemod)
+        names(currdf)[1:4] <- c("subIndustry", "anngrowth", "year", "Region2")  
+    }
+  #plot fitted
   p1a <- currdf %>%
-    add_predictions(curr_mod) %>%
     filter(Region2 %in% levels(droplevels(currdf$Region2))[1:6]) %>%
     ggplot(aes(year, anngrowth)) +
       geom_point() +
-      geom_line(aes(year, pred), inherit.aes = FALSE) +
+      geom_line(aes(year, .fitted), inherit.aes = FALSE) +
       ggtitle("Linear trend") +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   p1b <- currdf %>%
-    add_predictions(curr_mod) %>%
     filter(Region2 %in% levels(droplevels(currdf$Region2))[7:12]) %>%
     ggplot(aes(year, anngrowth)) +
       geom_point() +
-      geom_line(aes(year, pred), inherit.aes = FALSE) +
+      geom_line(aes(year, .fitted), inherit.aes = FALSE) +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   p1c <- currdf %>%
-    add_predictions(curr_mod) %>%
     filter(Region2 %in% levels(droplevels(currdf$Region2))[13:length(levels(droplevels(currdf$Region2)))]) %>%
     ggplot(aes(year, anngrowth)) +
       geom_point() +
-      geom_line(aes(year, pred), inherit.aes = FALSE) +
+      geom_line(aes(year, .fitted), inherit.aes = FALSE) +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
    p2a <- currdf %>% 
-    add_residuals(curr_mod) %>%
      filter(Region2 %in% levels(droplevels(currdf$Region2))[1:6]) %>%
-    ggplot(aes(year, resid)) +
+    ggplot(aes(year, .resid)) +
       geom_line() +
       ggtitle("Remaining pattern") +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   p2b <- currdf %>% 
-    add_residuals(curr_mod) %>%
     filter(Region2 %in% levels(droplevels(currdf$Region2))[7:12]) %>%
-    ggplot(aes(year, resid)) +
+    ggplot(aes(year, .resid)) +
       geom_line() +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   p2c <- currdf %>% 
-    add_residuals(curr_mod) %>%
     filter(Region2 %in% levels(droplevels(currdf$Region2))[13:length(levels(droplevels(currdf$Region2)))]) %>%
-    ggplot(aes(year, resid)) +
+    ggplot(aes(year, .resid)) +
       geom_line() +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "top") +
       theme_minimal() +
@@ -349,19 +408,25 @@ for(i in levels(anngrowthdf$subIndustry)) {
   grid.arrange(p1a, p2a, ncol=2)
   grid.arrange(p1b, p2b, ncol=2)
   grid.arrange(p1c, p2c, ncol=2)
+  
   } else {
+    #print models
+    currdf <- dfmods  %>% filter(subIndustry==i)
+    printfun(currdf)
+    #predict models
+    currdf <- currdf %>% augment(basemod)
+    names(currdf)[1:4] <- c("subIndustry", "anngrowth", "year", "Region2")
+    #plot fitted
     p1 <- currdf %>%
-    add_predictions(curr_mod) %>%
-    ggplot(aes(year, anngrowth)) +
+      ggplot(aes(year, anngrowth)) +
       geom_point() +
-      geom_line(aes(year, pred), inherit.aes = FALSE) +
+      geom_line(aes(year, .fitted), inherit.aes = FALSE) +
       ggtitle("Linear trend") +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "right") +
       theme_minimal() +
       theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
   p2 <- currdf %>% 
-    add_residuals(curr_mod) %>%
-    ggplot(aes(year, resid)) +
+     ggplot(aes(year, .resid)) +
       geom_line() +
       ggtitle("Remaining pattern") +
       facet_wrap(~ Region2, scales="free_y", ncol=1, strip.position = "right") +
@@ -373,15 +438,6 @@ for(i in levels(anngrowthdf$subIndustry)) {
 ```
 
 
-###Next steps?
-So it appears there are no significant trends for any industry.  
-
-* We could try using a different measure of growth.
-  + annual growth rate is highly influenced by small values and starts-stops in the industries.
-  + Often people doing time series model log(value in t1) - log(value in t0)
-* We could try using a type of model less influenced by outliers (rlm).
-* We could try modelling a moving window average 
-  + though  for many countries/industries we don't have long-time series.
 
 
 
