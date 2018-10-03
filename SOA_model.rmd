@@ -128,7 +128,7 @@ In some parts of the Arctic there is no shipping in certain years (e.g. Davis Se
 We calculate annual growth in oil and gas from the cumulative number of wells drilled across time, as activity is intermittent (lots of years with no wells drilled). This gives growth rates of zero in years with no activity, rather than growth rates of Inf. This can be loosely taken as a measure of the growth (both rise and fall) in the industry across time.
 
 
-```{r growthrates}
+```{r growthrates, include=FALSE}
   #calculate annual growth
 zif=0.0000001
 
@@ -150,7 +150,7 @@ write_excel_csv(anngrowthdf, "All_industries_annualgrowth.csv") #for fileEncodin
 Next we calculate the intensity of each industry, using the mean value across 2012-2017.  
 we use a spread of years rather than a single year to account for interannual variation and missing data.
 
-```{r intensities} 
+```{r intensities, include=FALSE} 
 
 intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
   filter(year %in% 2012:2017) %>% 
@@ -160,7 +160,7 @@ intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas"))
 
 We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
 
-```{r fixintensity1}
+```{r fixintensity1, include=FALSE}
 oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>% 
   filter(year %in% 1960:2017) %>% 
   group_by(Country, Industry, subIndustry, Region, Metric)  %>%
@@ -185,7 +185,7 @@ Let's plot the data.
 I removed one datapoint for Shipping_distance in Davis Strait, where growth rate in 2002-2013 was 5180% (up from no shipping in 2012 to 518nm in 2013)  
 Oil and gas development shows a high growth rate in 2005 for the Barent's Sea, due to the start of production (up from 1 well in 2004 to 9 in 2005)  
 
-```{r plot growthrates, echo=FALSE, warning=FALSE}
+```{r plot growthrates, echo=FALSE, warning=FALSE, include=FALSE}
 
 levels(anngrowthdf$subIndustry)
 
@@ -234,7 +234,7 @@ Norway = Registered hunters,
 Finland & Sweden = Paid hunting permits,  
 No data for Russia, Faroes, Iceland, Canada.  
 
-```{r plot intensities, echo=FALSE, warning=FALSE}
+```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE}
 intensitydf %>% filter(Industry=="Tourism") %>%
 ggplot(aes(x=Country, y=intensity)) +
   geom_col() +
@@ -284,7 +284,7 @@ anngrowthdf$Region2 <- as.factor(anngrowthdf$Region2)
 #run the models across the industries
 dfmods <- anngrowthdf %>% 
   filter(!subIndustry %in% c("Fishing", "Shipping_distance")) %>%
-  filter(year>1997 & year<2018) %>%
+  filter(year>2012 & year<2018) %>%
   group_by(subIndustry) %>%
   do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Iceland"), data=.), 
      intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Iceland"), data=.),
@@ -292,7 +292,7 @@ dfmods <- anngrowthdf %>%
 #run the models across the industries fishing
 dfmods_fish <- anngrowthdf %>% 
   filter(subIndustry=="Fishing") %>%
-  filter(year>1997 & year<2018) %>%
+  filter(year>2012 & year<2018) %>%
   group_by(subIndustry) %>%
   do(basemod = lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="Barents Sea"), data=.), 
      intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="Barents Sea"), data=.),
@@ -300,7 +300,7 @@ dfmods_fish <- anngrowthdf %>%
 #run the models across the industries shipping
 dfmods_ship <- anngrowthdf %>% 
   filter(subIndustry=="Shipping_distance") %>%
-  filter(year>1997 & year<2018) %>%
+  filter(year>2012 & year<2018) %>%
   group_by(subIndustry) %>%
   do(basemod =lm(anngrowth ~ I(year-2017) + relevel(Region2, ref="NorwayEEZ"), data=.), 
      intmod = lm(anngrowth ~ I(year-2017) * relevel(Region2, ref="NorwayEEZ"), data=.),
@@ -337,7 +337,7 @@ knitr::kable(overallmodelfit, caption="Model selection")
 for(i in levels(anngrowthdf$subIndustry)) {
 #run the models across the industries
   currdat <- anngrowthdf %>% 
-    filter(year>1997 & year<2018) %>%
+    filter(year>2012 & year<2018) %>%
     filter(subIndustry==i)
   currmod <- lm(anngrowth ~ I(year-2017), currdat)
   print(summary(currmod))
