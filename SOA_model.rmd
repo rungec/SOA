@@ -3,17 +3,17 @@ title: "State of Arctic models"
 output: html_document
 ---
   
-```{r packages and data, include=FALSE}
+```{r packages and data, include=FALSE, cache=T}
 require(knitr)
 require(tidyverse)
 require(lubridate)
-require(nlme) #for mixed effects models
+require(mgcv) #for gam mixed effects models
 require(broom) #for nested modelling
 require(modelr)
 require(gridExtra) #for grid.arrange
-require(broom) #for do and tidy
 require(ggfortify) #for autoplot
 require(pander) #for pander table
+require(ggpubr) #for ggarrange
 
 #set directories
 wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
@@ -40,7 +40,7 @@ subchunkify <- function(g, fig_height=7, fig_width=5) {
 
 ```
 
-```{r merge data, include=FALSE}
+```{r merge data, include=FALSE, cache=T, dependson="packages and data"}
 #load and merge files
 alldat <- lapply(industries, function(i) {
   print(paste0("loading ", i))
@@ -114,21 +114,235 @@ write_excel_csv(alldat, "All_industries_long.csv") #for fileEncoding = "UTF-8-BO
 
 ```
 
-We calculate the annual growth rate in X over start years (y0) value (Xy0)  
-annual growth rate = {log10(Xy1+zif) - log10(Xy0+zif)}*(1/nyrs)
+### Intensity of activities
+We calculate the intensity of each industry using the mean value across 2012-2017.  
+we use a spread of years rather than a single year to account for interannual variation and missing data.
 
-in the output table, annual growth is assigned to final year (y1) - so annual growth between 1999 and 2003, is assigned to 2003.  
-Where data is missing for several years, the annual growth rate is calculated from the two time points we have data for. Note that we don't include the no-data points in the model i.e. perform no interpolation for missing data.
+```{r intensities, include=FALSE, cache=T, dependson=c("packages and data", "merge data")} 
 
-### Exceptions:
+intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
+  filter(year %in% 2012:2017) %>% 
+  group_by(Country, Region, Industry, subIndustry, Metric)  %>%
+  summarise(intensity=mean(value)) 
+```
+
+We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
+
+```{r fixintensity1, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>% 
+  filter(year %in% 1960:2017) %>% 
+  group_by(Country, Industry, subIndustry, Region, Metric)  %>%
+  summarise(intensity=sum(value_raw, na.rm=TRUE))
+
+#replace oil and gas values with these new values
+intensitydf <- bind_rows(intensitydf, oilintensity)
+intensitydf <- intensitydf %>% drop_na() %>% droplevels()
+write_excel_csv(intensitydf, "All_industries_intensity.csv") #for fileEncoding = "UTF-8-BOM"
+
+```
+
+Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
+We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
+
+```{r, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
+```
+
+The plots for Domestic and International tourism and Hunters should be interpreted with caution - different countries use different metrics.  
+
+#### Domestic & International tourism
+Canada, Alaska, Russia = number of visitors    
+All other countries = guest nights 
+
+#### Hunters
+Alaska = All hunting/trapping/fishing licenses  
+Greenland = Sports hunters,  
+Norway = Registered hunters,  
+Finland & Sweden = Paid hunting permits,  
+No data for Russia, Faroes, Iceland, Canada.  
+
+```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE, cache=T, dependson=c("packages and data", "merge data", "intensities", "fixintensity1")}
+intensitydf %>% filter(Industry=="Tourism") %>%
+ggplot(aes(x=Country, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ subIndustry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
+ggplot(aes(x=Country, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ subIndustry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Fishing") %>%
+ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  ggtitle("Fishing catch") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Shipping_distance") %>%
+ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  ggtitle("Shipping distance") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+```  
+
+ 
+### Data processing:
 #### Shipping distance: 
-In some parts of the Arctic there is no shipping in certain years (e.g. Davis Sea in 2012). I added a small constant (zif) to these numbers, because log10(0) evaluates to -Inf, which can't be modelled.
+In some parts of the Arctic there is no shipping in certain years (e.g. Davis Sea in 2012). I added a small constant (1) to these numbers, because log10(0) evaluates to -Inf, which can't be modelled.
 
 #### Oil and gas:
-We calculate annual growth in oil and gas from the cumulative number of wells drilled across time, as activity is intermittent (lots of years with no wells drilled). This gives growth rates of zero in years with no activity, rather than growth rates of Inf. This can be loosely taken as a measure of the growth (both rise and fall) in the industry across time.
+We calculate annual activity in oil and gas from the cumulative number of wells drilled across time, as activity is intermittent (lots of years with no wells drilled). This gives growth rates of zero in years with no activity, rather than growth rates of Inf. This can be loosely taken as a measure of the growth (both rise and fall) in the industry across time.
+
+#### Cruise tourism
+Murmansk values adjustment described above makes no difference to the znorm.
+
+#### Normalisation
+Since different metrics are used within an industry across the Arctic (e.g. guest nights vs number of visitors) we z-score standardise the values (subtract mean of all datapoints for an individual point, then divide by standard deviation of all points). In order to have robust estimates, we dropped regions where we could only find data for 3 or fewer years (e.g. cruise tourism in Sakha, n=2).
+
+#### Interpolation
+Note that we don't include years with no data in the model i.e. perform no interpolation for missing data.
+
+```{r znorm, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+znormdat <- alldat %>%  filter(!is.na(value)) %>% #drop years missing data
+  group_by(subIndustry, Region) %>% 
+  mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
+
+#check that the data transformation we do in chunk 'merge data' hasn't dramatically changed the zscores
+# alldat2 <- alldat
+# alldat2[alldat2$Industry=="OilandGas", "value_raw"] <- alldat2[alldat2$Industry=="OilandGas", "value"]
+# znormdatcheck <- alldat2 %>%  filter(!is.na(value)) %>% #drop years missing data
+#   group_by(subIndustry, Region) %>% 
+#   mutate(znorm = scale(value_raw, center=TRUE, scale=TRUE) %>% as.vector)
+# plot(znormdat$znorm, znormdatcheck$znorm)
+
+#how many values are there for each region?
+n <- alldat %>% filter(!is.na(value)) %>% 
+  group_by(subIndustry, Region) %>% 
+  count()
+#write.table(n, "SOA_nobservations_byregion_andindustry.csv")
+
+#drop regions with insuffient data to calculate robust znorm
+dropregions <- n[n$n <= 3, ] #drop with 3 or fewer observations
+znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subIndustry %in% dropregions$subIndustry), ]
+#write_excel_csv(znormdat, "All_industries_znorm.csv") #for fileEncoding = "UTF-8-BOM"
+
+```
+
+### Models
+We test 4 models:  
+1. a gam model of z-normalised value ~ smoothed year and look to see if there is any temporal autocorrelation  
+2. We then add in the autocorrelation term, and see if the model performs better.  
+3. a gamm model of z-normalised value ~ smoothed year with Region as a random effect, and look for autocorrelation.  
+4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
 
 
-```{r growthrates, include=FALSE}
+
+```{r models, include=TRUE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+#znormdat <- read.csv("All_industries_znorm.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
+
+#set up function to plot the model outputs
+acfplotfun <- function(currmod, corrinmod){
+  if(corrinmod==TRUE){
+    currtitle = paste(currmod$gam$formula, "+ corr(yr)", sep=" ")
+  } else {
+    currtitle = currmod$gam$formula
+  }
+  #plot the model autocorrelation and acf plot
+  acfvals <- with(pacf(resid(currmod$lme, type="normalized"), lag=20, plot=F), data.frame(lag, acf))
+  p1 <- ggplot(acfvals, aes(lag, acf)) +
+        geom_hline(aes(yintercept = 0)) +
+        geom_segment(mapping = aes(xend = lag, yend = 0)) +
+        ggtitle()
+  p2 <- ggplot(currdf, aes(y=resid(currmod$lme), x=currdf$year, col=Region))+
+        geom_point() +
+        geom_line() +
+        geom_abline(slope = 0, intercept=0, lty = 2)
+  ggarrange(p1, p2, ncol=2, legend="bottom")
+  #plot the model fits
+
+  #print the model summary
+  print(summary(currmod$gam))
+  print(summary(currmod$lme))
+  print(anova(currmod$gam))
+  #plot the model
+}
+
+################
+#Main processing
+################
+currdf <- znormdat %>% filter(subIndustry=="Cruise_tourism")
+
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=NULL, correlation=NULL, data=currdf)
+acfplotfun(mod1, corrinmod=FALSE) #examine the autocorrelation
+
+#Add in temporal autocorrelation
+mod2 <- gamm(znorm ~ s(year), correlation = corCAR1(value = 0.2, form = ~ year | Region), data=currdf)
+acfplotfun(mod2, corrinmod=TRUE)
+
+#add a random effect
+mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), data=currdf)
+acfplotfun(mod3, corrinmod=FALSE)
+
+#add a random effect and autocorrelation
+mod4 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corCAR1(value = 0.2, form = ~ year | Region), data=currdf)
+acfplotfun(mod4, corrinmod=TRUE)
+
+
+                    
+p3 <- plot(mod4$gam)
+p4 <- plot(mod4$lme)  
+summary(mod2$gam)
+summary(mod2$lme)
+anova(mod2$gam)                    
+                    
+plotGAMM in gamm4                    
+                    
+currdf2 <- currdf %>% add_predictions(mod4)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r growthrates, include=FALSE, cache=T, dependson=c("packages and data", "merge data"), eval=FALSE}
+
+# We calculate the annual growth rate in X over start years (y0) value (Xy0)  
+# annual growth rate = {log10(Xy1+zif) - log10(Xy0+zif)}*(1/nyrs)
+# 
+# in the output table, annual growth is assigned to final year (y1) - so annual growth between 1999 and 2003, is assigned to 2003.  
+# Where data is missing for several years, the annual growth rate is calculated from the two time points we have data for. 
   #calculate annual growth
 zif=0.0000001
 
@@ -147,45 +361,12 @@ write_excel_csv(anngrowthdf, "All_industries_annualgrowth.csv") #for fileEncodin
  
 ```
 
-Next we calculate the intensity of each industry, using the mean value across 2012-2017.  
-we use a spread of years rather than a single year to account for interannual variation and missing data.
-
-```{r intensities, include=FALSE} 
-
-intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
-  filter(year %in% 2012:2017) %>% 
-  group_by(Country, Region, Industry, subIndustry, Metric)  %>%
-  summarise(intensity=mean(value)) 
-```
-
-We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
-
-```{r fixintensity1, include=FALSE}
-oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>% 
-  filter(year %in% 1960:2017) %>% 
-  group_by(Country, Industry, subIndustry, Region, Metric)  %>%
-  summarise(intensity=sum(value_raw, na.rm=TRUE))
-
-#replace oil and gas values with these new values
-intensitydf <- bind_rows(intensitydf, oilintensity)
-intensitydf <- intensitydf %>% drop_na() %>% droplevels()
-write_excel_csv(intensitydf, "All_industries_intensity.csv") #for fileEncoding = "UTF-8-BOM"
-
-```
-
-Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
-We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This gives higher than expected cruise passengers - same intensity as Troms...
-```{r, include=FALSE}
-alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
-```
-
-Let's plot the data.  
 
 ## Annual growth rates
 I removed one datapoint for Shipping_distance in Davis Strait, where growth rate in 2002-2013 was 5180% (up from no shipping in 2012 to 518nm in 2013)  
 Oil and gas development shows a high growth rate in 2005 for the Barent's Sea, due to the start of production (up from 1 well in 2004 to 9 in 2005)  
 
-```{r plot growthrates, echo=FALSE, warning=FALSE, include=FALSE}
+```{r plot growthrates, echo=FALSE, warning=FALSE, include=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
 
 levels(anngrowthdf$subIndustry)
 
@@ -220,50 +401,7 @@ anngrowthdf %>% filter(Industry=="Shipping_distance" & year %in% c(2012:2017)) %
 
 ```
 
-## Intensities  
-The plots for Domestic and International tourism and Hunters should be interpreted with caution - different countries use different metrics.  
 
-#### Domestic & International tourism
-Canada, Alaska, Russia = number of visitors    
-All other countries = guest nights 
-
-#### Hunters
-Alaska = All hunting/trapping/fishing licenses  
-Greenland = Sports hunters,  
-Norway = Registered hunters,  
-Finland & Sweden = Paid hunting permits,  
-No data for Russia, Faroes, Iceland, Canada.  
-
-```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE}
-intensitydf %>% filter(Industry=="Tourism") %>%
-ggplot(aes(x=Country, y=intensity)) +
-  geom_col() +
-  facet_wrap(~ subIndustry, scales="free_y") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
-ggplot(aes(x=Country, y=intensity)) +
-  geom_col() +
-  facet_wrap(~ subIndustry, scales="free_y") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(Industry=="Fishing") %>%
-ggplot(aes(x=Region, y=intensity)) +
-  geom_col() +
-  ggtitle("Fishing catch") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(Industry=="Shipping_distance") %>%
-ggplot(aes(x=Region, y=intensity)) +
-  geom_col() +
-  ggtitle("Shipping distance") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-```  
 
 ## Models
 It seems like the inter-annual variation is high, and no trends are immediately obvious in any industry.  
@@ -274,7 +412,7 @@ simple  = growth ~ year
 base    = growth ~ year + country
 interaction = growth ~ year * country
 
-```{r models, echo=FALSE, warning=FALSE}
+```{r models, echo=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
 #set up data
 #anngrowthdf$Region2 <- as.character(anngrowthdf$Country)
 anngrowthdf$Region2 <- as.character(anngrowthdf$Region)
@@ -333,7 +471,7 @@ knitr::kable(overallmodelfit, caption="Model selection")
 
 ### Plot growth against year for the entire Arctic.
 
-```{r models_simple, echo=FALSE, warning=FALSE}
+```{r models_simple, echo=FALSE, warning=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models")}
 for(i in levels(anngrowthdf$subIndustry)) {
 #run the models across the industries
   currdat <- anngrowthdf %>% 
@@ -365,7 +503,7 @@ for(i in levels(anngrowthdf$subIndustry)) {
 
 ### Plot growth against year, including region as an additive term.
 
-```{r models_base, echo=FALSE}
+```{r models_base, echo=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models")}
 printfun <- function(data){
         #pander(data[[2]][[1]])
         print(summary(data[[2]][[1]]))
