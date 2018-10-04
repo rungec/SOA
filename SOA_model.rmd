@@ -231,81 +231,129 @@ n <- alldat %>% filter(!is.na(value)) %>%
 #drop regions with insuffient data to calculate robust znorm
 dropregions <- n[n$n <= 3, ] #drop with 3 or fewer observations
 znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subIndustry %in% dropregions$subIndustry), ]
+
 #write_excel_csv(znormdat, "All_industries_znorm.csv") #for fileEncoding = "UTF-8-BOM"
 
 ```
 
 ### Models
 We test 4 models:  
-1. a gam model of z-normalised value ~ smoothed year and look to see if there is any temporal autocorrelation  
-2. We then add in the autocorrelation term, and see if the model performs better.  
+#### Model 1
+A gam model of z-normalised value ~ smoothed year. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
+#### Model 2
+We then add in the autocorrelation term, and see if the model performs better. We compare two correlation structures
+mod2a = model with autoregressive process of order 1
+mod2b = model with autoregressive moving average process of order 1
+
+
+#### Model 3
 3. a gamm model of z-normalised value ~ smoothed year with Region as a random effect, and look for autocorrelation.  
 4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
 
 
 
-```{r models, include=TRUE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+```{r modelplotfuns, include=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data")}
 #znormdat <- read.csv("All_industries_znorm.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
 #set up function to plot the model outputs
-acfplotfun <- function(currmod, corrinmod){
-  if(corrinmod==TRUE){
-    currtitle = paste(currmod$gam$formula, "+ corr(yr)", sep=" ")
-  } else {
-    currtitle = currmod$gam$formula
-  }
+acfplotfun <- function(currmod){
   #plot the model autocorrelation and acf plot
-  acfvals <- with(pacf(resid(currmod$lme, type="normalized"), lag=20, plot=F), data.frame(lag, acf))
-  p1 <- ggplot(acfvals, aes(lag, acf)) +
-        geom_hline(aes(yintercept = 0)) +
-        geom_segment(mapping = aes(xend = lag, yend = 0)) +
-        ggtitle()
-  p2 <- ggplot(currdf, aes(y=resid(currmod$lme), x=currdf$year, col=Region))+
-        geom_point() +
-        geom_line() +
-        geom_abline(slope = 0, intercept=0, lty = 2)
-  ggarrange(p1, p2, ncol=2, legend="bottom")
-  #plot the model fits
-
-  #print the model summary
-  print(summary(currmod$gam))
-  print(summary(currmod$lme))
-  print(anova(currmod$gam))
-  #plot the model
+  par(mfrow=c(1,2))
+  acf(resid(currmod$lme, type="normalized"), lag=20)
+  pacf(resid(currmod$lme, type="normalized"), lag=20)
 }
 
+comparemodelsplot <- function(m1, m2, currlabels){
+    #set up predictions  
+    grid <- currdf %>% 
+      data_grid(year, Region) %>%
+      add_predictions(m1)
+    grid2 <- currdf %>% 
+      data_grid(year, Region) %>%
+      add_predictions(m2)
+  #plot predictions
+  ggplot(currdf, aes(year, znorm, color=Region)) +
+    geom_point() +
+    geom_line(data=grid, aes(x=year, y=pred), col="black", inherit.aes = FALSE) +
+    geom_line(data=grid2, aes(x=year, y=pred), col="blue", inherit.aes = FALSE) +
+    annotate("text", 
+             x=(min(currdf$year)+4), 
+             y=c(max(currdf$znorm)-0.1, max(currdf$znorm)-0.4), 
+             col=c("black", "blue"), size=4, hjust=0, label=currlabels) +
+    geom_segment(x=(min(currdf$year)+1), xend=(min(currdf$year)+3), 
+             y=max(currdf$znorm)-0.1, yend=max(currdf$znorm)-0.1, 
+             col="black", inherit.aes = FALSE) +
+    geom_segment(x=(min(currdf$year)+1), xend=(min(currdf$year)+3), 
+             y=max(currdf$znorm)-0.4, yend=max(currdf$znorm)-0.4, 
+             col="blue", inherit.aes = FALSE) +
+    theme_minimal()
+}
+  
+plotmodelbyregion <- function(m1){
+  #set up data
+  grid <- currdf %>% 
+      data_grid(year, Region) %>%
+      gather_predictions(m1)
+  #plot 
+  ggplot(currdf, aes(year, znorm)) +
+    geom_point() +
+    geom_line(data=grid, aes(x=year, y=pred), col="black", inherit.aes = FALSE) +
+    facet_wrap(~Region) +
+    theme(legend.position="none") 
+ } 
+  
+ 
+```
+
+
+
+```{r models, include=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm")}
 ################
 #Main processing
 ################
-currdf <- znormdat %>% filter(subIndustry=="Cruise_tourism")
+currdf <- znormdat %>% filter(subIndustry=="Cruise_tourism") %>% droplevels()
+print(i)
 
 #Basic model, ignoring temporal autocorrelation
 mod1 <- gamm(znorm ~ s(year), random=NULL, correlation=NULL, data=currdf)
-acfplotfun(mod1, corrinmod=FALSE) #examine the autocorrelation
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
 
-#Add in temporal autocorrelation
-mod2 <- gamm(znorm ~ s(year), correlation = corCAR1(value = 0.2, form = ~ year | Region), data=currdf)
-acfplotfun(mod2, corrinmod=TRUE)
+#Add in temporal autocorrelation with 1yr lag
+mod2a <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year | Region), data=currdf)
+mod2b <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=1), data=currdf) #1yr lag
+mod2b <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=2), data=currdf) #2yr lag
+anova(mod2a$lme, mod2b$lme, mod2c$lme) #any difference?
+anova(mod1$lme, mod2a$lme) #any difference?
+acfplotfun(mod2a) #any correlation remaining?
 
-#add a random effect
-mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), data=currdf)
-acfplotfun(mod3, corrinmod=FALSE)
+#compare mod1 and mod2
+comparemodelsplot(mod1$gam, mod2a$gam, c("Uncorrelated Errors","AR(1) Errors"))
+plot(mod2a$gam, residuals = TRUE, pch = 19, cex = 0.75)
+#Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval
 
-#add a random effect and autocorrelation
-mod4 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corCAR1(value = 0.2, form = ~ year | Region), data=currdf)
-acfplotfun(mod4, corrinmod=TRUE)
+#add a random intercept
+mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year | Region), data=currdf)
+plot(mod3$gam, residuals = TRUE, pch = 19, cex = 0.75)
+print(summary(mod3$lme))
+summary(mod3$gam)
+summary(mod3$lme)
+anova(mod3$gam) 
 
+#add a random correlated slope and intercept
+mod4 <- gamm(znorm ~ s(year), random=list(Region=~1+year), correlation = corAR1(form = ~ year | Region), data=currdf)
+plot(mod4$gam, residuals = TRUE, pch = 19, cex = 0.75)
+print(summary(mod4$gam))
+print(summary(mod4$lme))
+anova(mod3$lme, mod4$lme) 
+plotmodelbyregion(mod4$gam)
+comparemodelsplot(mod3$gam, mod4$gam)
 
-                    
-p3 <- plot(mod4$gam)
-p4 <- plot(mod4$lme)  
-summary(mod2$gam)
-summary(mod2$lme)
-anova(mod2$gam)                    
-                    
-plotGAMM in gamm4                    
-                    
-currdf2 <- currdf %>% add_predictions(mod4)
+#NEXT STEPS
+# 
 
 
 
