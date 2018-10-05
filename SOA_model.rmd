@@ -263,7 +263,7 @@ acfplotfun <- function(currmod){
   pacf(resid(currmod$lme, type="normalized"), lag=20)
 }
 
-comparemodelsplot <- function(m1, m2, currlabels){
+comparemodelsplot <- function(m1, m2){
     #set up predictions  
     grid <- currdf %>% 
       data_grid(year, Region) %>%
@@ -279,7 +279,7 @@ comparemodelsplot <- function(m1, m2, currlabels){
     annotate("text", 
              x=(min(currdf$year)+4), 
              y=c(max(currdf$znorm)-0.1, max(currdf$znorm)-0.4), 
-             col=c("black", "blue"), size=4, hjust=0, label=currlabels) +
+             col=c("black", "blue"), size=4, hjust=0, label=c("Uncorrelated Errors","AR(1) Errors")) +
     geom_segment(x=(min(currdf$year)+1), xend=(min(currdf$year)+3), 
              y=max(currdf$znorm)-0.1, yend=max(currdf$znorm)-0.1, 
              col="black", inherit.aes = FALSE) +
@@ -291,13 +291,12 @@ comparemodelsplot <- function(m1, m2, currlabels){
   
 plotmodelbyregion <- function(m1){
   #set up data
-  grid <- currdf %>% 
-      data_grid(year, Region) %>%
-      gather_predictions(m1)
+  pred <- predict(m1, se.fit=T)
   #plot 
-  ggplot(currdf, aes(year, znorm)) +
+  currdf %>% ggplot(aes(year, znorm)) +
     geom_point() +
-    geom_line(data=grid, aes(x=year, y=pred), col="black", inherit.aes = FALSE) +
+    geom_ribbon(aes(ymin=pred$fit-1.96*pred$se.fit, ymax=pred$fit+1.96*pred$se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=pred$fit), col="black", lwd=1) +
     facet_wrap(~Region) +
     theme(legend.position="none") 
  } 
@@ -311,7 +310,11 @@ plotmodelbyregion <- function(m1){
 ################
 #Main processing
 ################
-currdf <- znormdat %>% filter(subIndustry=="Cruise_tourism") %>% droplevels()
+industries <- unique(znormdat$subIndustry)
+industries <- industries[industries!="Population"]
+for(i in industries){
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
 print(i)
 
 #Basic model, ignoring temporal autocorrelation
@@ -325,13 +328,13 @@ print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any signi
 #Add in temporal autocorrelation with 1yr lag
 mod2a <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year | Region), data=currdf)
 mod2b <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=1), data=currdf) #1yr lag
-mod2b <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=2), data=currdf) #2yr lag
-anova(mod2a$lme, mod2b$lme, mod2c$lme) #any difference?
-anova(mod1$lme, mod2a$lme) #any difference?
+mod2c <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=2), data=currdf) #2yr lag
+print(anova(mod2a$lme, mod2b$lme, mod2c$lme)) #any difference?
+print(anova(mod1$lme, mod2a$lme)) #any difference?
 acfplotfun(mod2a) #any correlation remaining?
 
 #compare mod1 and mod2
-comparemodelsplot(mod1$gam, mod2a$gam, c("Uncorrelated Errors","AR(1) Errors"))
+comparemodelsplot(mod1$gam, mod2a$gam)
 plot(mod2a$gam, residuals = TRUE, pch = 19, cex = 0.75)
 #Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval
 
@@ -339,22 +342,24 @@ plot(mod2a$gam, residuals = TRUE, pch = 19, cex = 0.75)
 mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year | Region), data=currdf)
 plot(mod3$gam, residuals = TRUE, pch = 19, cex = 0.75)
 print(summary(mod3$lme))
-summary(mod3$gam)
-summary(mod3$lme)
-anova(mod3$gam) 
+print(summary(mod3$gam))
+print(summary(mod3$lme))
+print(anova(mod3$gam) )
 
 #add a random correlated slope and intercept
-mod4 <- gamm(znorm ~ s(year), random=list(Region=~1+year), correlation = corAR1(form = ~ year | Region), data=currdf)
+mod4 <- gamm(znorm ~ s(year), random=list(Region=~1, Region=~year), correlation = corAR1(form = ~ year | Region), data=currdf)
 plot(mod4$gam, residuals = TRUE, pch = 19, cex = 0.75)
 print(summary(mod4$gam))
 print(summary(mod4$lme))
-anova(mod3$lme, mod4$lme) 
+print(anova(mod4$lme) )
 plotmodelbyregion(mod4$gam)
 comparemodelsplot(mod3$gam, mod4$gam)
 
+}
 #NEXT STEPS
-# 
-
+# adjust k value and bs, and test method=REML
+# use this methods https://www.fromthebottomoftheheap.net/2011/06/12/additive-modelling-and-the-hadcrut3v-global-mean-temperature-series/ to see if changes are significant
+#figure out how to add error bars
 
 
 ```
@@ -384,7 +389,7 @@ comparemodelsplot(mod3$gam, mod4$gam)
 
 
 
-```{r growthrates, include=FALSE, cache=T, dependson=c("packages and data", "merge data"), eval=FALSE}
+```{r growthrates, include=FALSE, eval=FALSE, cache=T, dependson=c("packages and data", "merge data")}
 
 # We calculate the annual growth rate in X over start years (y0) value (Xy0)  
 # annual growth rate = {log10(Xy1+zif) - log10(Xy0+zif)}*(1/nyrs)
@@ -414,7 +419,7 @@ write_excel_csv(anngrowthdf, "All_industries_annualgrowth.csv") #for fileEncodin
 I removed one datapoint for Shipping_distance in Davis Strait, where growth rate in 2002-2013 was 5180% (up from no shipping in 2012 to 518nm in 2013)  
 Oil and gas development shows a high growth rate in 2005 for the Barent's Sea, due to the start of production (up from 1 well in 2004 to 9 in 2005)  
 
-```{r plot growthrates, echo=FALSE, warning=FALSE, include=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
+```{r plot growthrates, echo=FALSE, warning=FALSE, eval=FALSE, include=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
 
 levels(anngrowthdf$subIndustry)
 
@@ -460,7 +465,7 @@ simple  = growth ~ year
 base    = growth ~ year + country
 interaction = growth ~ year * country
 
-```{r models, echo=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
+```{r modelsold, echo=FALSE, eval=FALSE, include=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "growthrates")}
 #set up data
 #anngrowthdf$Region2 <- as.character(anngrowthdf$Country)
 anngrowthdf$Region2 <- as.character(anngrowthdf$Region)
@@ -519,7 +524,7 @@ knitr::kable(overallmodelfit, caption="Model selection")
 
 ### Plot growth against year for the entire Arctic.
 
-```{r models_simple, echo=FALSE, warning=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models")}
+```{r models_simple, echo=FALSE, warning=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models"), eval=FALSE, include=FALSE}
 for(i in levels(anngrowthdf$subIndustry)) {
 #run the models across the industries
   currdat <- anngrowthdf %>% 
@@ -551,7 +556,7 @@ for(i in levels(anngrowthdf$subIndustry)) {
 
 ### Plot growth against year, including region as an additive term.
 
-```{r models_base, echo=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models")}
+```{r models_base, echo=FALSE, dependson=c("packages and data", "merge data", "growthrates", "models"), eval=FALSE, include=FALSE}
 printfun <- function(data){
         #pander(data[[2]][[1]])
         print(summary(data[[2]][[1]]))
