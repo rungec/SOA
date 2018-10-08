@@ -1,9 +1,11 @@
 ---
 title: "State of Arctic models"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
   
-```{r packages and data, include=FALSE, cache=T}
+```{r packages and data, include=FALSE, cache=F}
 require(knitr)
 require(tidyverse)
 require(lubridate)
@@ -145,7 +147,7 @@ write_excel_csv(intensitydf, "All_industries_intensity.csv") #for fileEncoding =
 Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
 We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
 
-```{r, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+```{r, include=FALSE, cache=F, dependson=c("packages and data", "merge data")}
 alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
 ```
 
@@ -237,100 +239,94 @@ znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subInd
 
 ```
 
-### Models using 'GAM' function
-We test 2 models:  
-#### Model 1
-The full gamm model of z-normalised value ~ smoothed year with Region as a random effect (random slope and intercept), and with an autocorrelation AR term with lag=1. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
+### Random effects in gam
+specifying the correct random effects is not so straightforward
 
-#### Model 2
-We then add in the autocorrelation term, and see if the model performs better. 
+```{r randomplots, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data"), fig.height=6, fig.width=8}
 
-```{r modelsgam, include=TRUE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm")}
-################
-#Main processing
-################
+#Set up data
 industries <- unique(znormdat$subIndustry)
 industries <- industries[industries!="Population"]
 i <- industries[1]
 #for(i in industries){
-
 currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
 print(as.character(i))
 
+#random intercept
+m1 <- bam(znorm ~ s(year) + s(Region, bs='re'), data=currdf)
+#random intercept and slope
+m2 <- bam(znorm ~ s(year, by=Region) + s(Region, year, bs='re'), data=currdf)
+#random smooth, common smoothness parameter
+m3 <- bam(znorm ~ s(year, by=Region, bs='fs'), data=currdf)
+#random smooth with population level effect
+m4 <- bam(znorm ~ s(year) + s(year, Region, bs = "fs"), data=currdf)
+#random smooth with population level effect, plus penalty for deviation from flat function
+m5 <- bam(znorm ~ s(year) + s(year, Region, bs = "fs", m=1), data=currdf)
 
-#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
-#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
-
-mod1 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), data=currdf)
-gamtabs(mod1, type="HTML")
-
-print(summary(mod1))
-#diagnostic plots
-par(mfrow=c(2,3), cex=1.1)
-diagnostics(m1, ask=FALSE)
-
-#Print the ACF of the model by region
-acf_resid(m1, split_pred = c("Region"), n=length(levels(currdf$Region)))
-#is autocorrelation significant?
-print(Box.test(resid(mod1), lag=20, type="Ljung-Box"))
-
-#plot the partial effects
-par(mfrow=c(1,2), cex=1.1)
-plot(m1, select=1, shade=TRUE, scale=0, main=i) #first smooth
-abline(h=0)
-plot(m1, select=2, shade=TRUE, scale=0) #second smooth
-abline(h=0)
-
-for(x in unique(currdf$Region)){
-#Plot smooths by region
-  par(mfrow=c(1,2), cex=1.1)
-  # including random effects:
-  plot_smooth(m1, view="year", cond=list(Region=x), main=i)
-  # excluding random effects:
-  plot_smooth(m1, view="year", cond=list(Region=x), rm.ranef=TRUE, main=x)
+plotfun <- function(mx, currlabel){
+  par(mfrow=c(2,2), cex=0.7)
+  plot(mx, select=1, shade=TRUE, scale=0, main=currlabel) #first smooth
+  abline(h=0)
+  plot(mx, select=2, shade=TRUE, scale=0) #second smooth
+  abline(h=0)
+  plot_smooth(mx, view="year", cond=list(Region="Iceland"), rm.ranef=TRUE)
+  plot_smooth(mx, view="year", cond=list(Region="Troms"), rm.ranef=TRUE, add=TRUE, col="red")
+  plot_smooth(mx, view="year", cond=list(Region="Iceland"), rm.ranef=FALSE)
+  plot_smooth(mx, view="year", cond=list(Region="Troms"), rm.ranef=FALSE, add=TRUE, col="red")
 }
-#plot data
-plot_data(m1, view="year", split_by="Region", cex=.5)
-inspect_random(m1, select=2)
 
-#choose the rho value of the temporal autocorrelation
-rhoval <- acf(resid(mod1), plot=FALSE)$acf[2]
-#model with autocorrelation
-mod2 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), rho=rhoval, data=currdf)
-print(summary(mod2))
-print(compareML(mod1, mod2))
-par(mfrow=c(1,2))
-acf(resid(mod2), lag=20, main="ACF Model 2")
-pacf(resid(mod2), lag=20, main="PACF Model 2")
-
+plotfun(m1, "random intercept")
+plotfun(m2, "random intercept and slope")
+plotfun(m3, "random smooth, common smooth par")
+plotfun(m4, "random smooth, region effect")
+plotfun(m5, "random smooth, region + penalty")
 ```
 
-### Models using 'GAMM' function
-We test 4 models:  
-#### Model 1
-A gam model of z-normalised value ~ smoothed year. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
-#### Model 2
-We then add in the autocorrelation term, and see if the model performs better. We compare two correlation structures
-mod2a = model with autoregressive process of order 1
-mod2b = model with autoregressive moving average process of order 1
-mod2c = model with autoregressive moving average process of order 1
-
-#### Model 3
-mod3. a gamm model of z-normalised value ~ smoothed year with Region as a random effect, and look for autocorrelation.  
-
-#### Model 4
-mod4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
 
 
-```{r modelplotfuns, include=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+```{r modelplotfuns, include=FALSE, warning=TRUE, cache=T, dependson=c("packages and data", "merge data")}
 #znormdat <- read.csv("All_industries_znorm.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
+
+#function to summarise gam models using itsadug package
+itsadugsummary <- function(m1){
+  #gamtabs(m1, type="HTML")
+  print(summary(mod1))
+  #diagnostic plots
+  par(mfrow=c(2,3), cex=0.7)
+  diagnostics(m1, ask=FALSE)
+
+  #Print the ACF of the model by region
+  acf_resid(m1, split_pred = c("Region"), n=length(levels(currdf$Region)))
+  #is autocorrelation significant?
+  print(Box.test(resid(m1), lag=20, type="Ljung-Box"))
+
+  #plot the partial effects
+  par(mfrow=c(1,2), cex=0.7)
+  plot(m1, select=1, shade=TRUE, scale=0, main=i) #first smooth
+  abline(h=0)
+  plot(m1, select=2, shade=TRUE, scale=0) #second smooth
+  abline(h=0)
+
+  #for(x in unique(currdf$Region)){
+  #Plot smooths by region
+   # par(mfrow=c(1,2), cex=0.7)
+    # including random effects:
+   # plot_smooth(m1, view="year", cond=list(Region=x), main=i)
+    # excluding random effects:
+   # plot_smooth(m1, view="year", cond=list(Region=x), rm.ranef=TRUE, main=x)
+ # }
+  #plot data
+  plot_data(m1, view="year", split_by="Region", cex=.7)
+  inspect_random(m1, select=2)
+}
+
 
 #set up function to plot the model outputs
 acfplotfun <- function(currmod){
   #plot the model autocorrelation and acf plot
   par(mfrow=c(1,2))
-  acf(resid(currmod$lme, type="normalized"), lag=20)
-  pacf(resid(currmod$lme, type="normalized"), lag=20)
+  acf(resid(currmod$lme, type="normalized"), lag=20, main="ACF")
+  pacf(resid(currmod$lme, type="normalized"), lag=20, main="PACF")
 }
 
 comparemodelsplot <- function(m1, m2){
@@ -375,7 +371,66 @@ plotmodelbyregion <- function(m1){
 ```
 
 
-```{r models_gamm, include=FALSE, warning=FALSE, cache=T, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm")}
+### Models using 'GAM' function
+We test 2 models:   
+
+#### Model 1
+The full gamm model of z-normalised value ~ smoothed year with Region as a random effect (random slope and intercept), and with an autocorrelation AR term with lag=1. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
+
+#### Model 2
+We then add in the autocorrelation term, and see if the model performs better. 
+
+```{r modelsgam, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm"), fig.height=6, fig.width=12}
+
+#Set up data
+industries <- unique(znormdat$subIndustry)
+industries <- industries[industries!="Population"]
+i <- industries[1]
+#for(i in industries){
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+print(as.character(i))
+
+#Model 1
+mod1 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), data=currdf) #fs or re?? I don't think the random componenets are specified correctly
+itsadugsummary(mod1)
+
+
+#Model 2 with autocorrelation
+#choose the rho value of the temporal autocorrelation
+rhoval <- acf(resid(mod1), plot=FALSE)$acf[2]
+mod2 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), rho=rhoval, data=currdf)
+print(summary(mod2))
+#print(compareML(mod1, mod2))
+par(mfrow=c(1,2))
+acf(resid(mod2), lag=20, main="ACF Model 2")
+pacf(resid(mod2), lag=20, main="PACF Model 2")
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+
+```
+
+### Models using 'GAMM' function
+We test 4 models:  
+
+#### Model 1
+A gam model of z-normalised value ~ smoothed year. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
+
+#### Model 2
+We then add in the autocorrelation term, and see if the model performs better. We compare two correlation structures
+mod2a = model with autoregressive process of order 1
+mod2b = model with autoregressive moving average process of order 1
+mod2c = model with autoregressive moving average process of order 1
+
+#### Model 3
+mod3. a gamm model of z-normalised value ~ smoothed year with Region as a random effect, and look for autocorrelation.  
+
+#### Model 4
+mod4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
+
+
+```{r models_gamm, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm")}
 ################
 #Main processing
 ################
