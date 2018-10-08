@@ -1,11 +1,9 @@
 ---
 title: "State of Arctic models"
-output:
-  html_document: default
-  pdf_document: default
+output: html_document
 ---
   
-```{r packages and data, include=FALSE, cache=F}
+```{r packages and data, include=FALSE}
 require(knitr)
 require(tidyverse)
 require(lubridate)
@@ -43,7 +41,7 @@ subchunkify <- function(g, fig_height=7, fig_width=5) {
 
 ```
 
-```{r merge data, include=FALSE, cache=T, dependson="packages and data"}
+```{r merge data, include=FALSE}
 #load and merge files
 alldat <- lapply(industries, function(i) {
   print(paste0("loading ", i))
@@ -121,7 +119,7 @@ write_excel_csv(alldat, "All_industries_long.csv") #for fileEncoding = "UTF-8-BO
 We calculate the intensity of each industry using the mean value across 2012-2017.  
 we use a spread of years rather than a single year to account for interannual variation and missing data.
 
-```{r intensities, include=FALSE, cache=T, dependson=c("packages and data", "merge data")} 
+```{r intensities, include=FALSE} 
 
 intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
   filter(year %in% 2012:2017) %>% 
@@ -131,7 +129,7 @@ intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas"))
 
 We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
 
-```{r fixintensity1, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+```{r fixintensity1, include=FALSE}
 oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>% 
   filter(year %in% 1960:2017) %>% 
   group_by(Country, Industry, subIndustry, Region, Metric)  %>%
@@ -147,7 +145,7 @@ write_excel_csv(intensitydf, "All_industries_intensity.csv") #for fileEncoding =
 Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
 We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
 
-```{r, include=FALSE, cache=F, dependson=c("packages and data", "merge data")}
+```{r, include=FALSE}
 alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
 ```
 
@@ -164,7 +162,7 @@ Norway = Registered hunters,
 Finland & Sweden = Paid hunting permits,  
 No data for Russia, Faroes, Iceland, Canada.  
 
-```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE, cache=T, dependson=c("packages and data", "merge data", "intensities", "fixintensity1")}
+```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE}
 intensitydf %>% filter(Industry=="Tourism") %>%
 ggplot(aes(x=Country, y=intensity)) +
   geom_col() +
@@ -212,7 +210,7 @@ Since different metrics are used within an industry across the Arctic (e.g. gues
 #### Interpolation
 Note that we don't include years with no data in the model i.e. perform no interpolation for missing data.
 
-```{r znorm, include=FALSE, cache=T, dependson=c("packages and data", "merge data")}
+```{r znorm, include=FALSE}
 znormdat <- alldat %>%  filter(!is.na(value)) %>% #drop years missing data
   group_by(subIndustry, Region) %>% 
   mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
@@ -242,7 +240,7 @@ znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subInd
 ### Random effects in gam
 specifying the correct random effects is not so straightforward
 
-```{r randomplots, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data"), fig.height=6, fig.width=8}
+```{r randomplots, include=TRUE, warning=TRUE, fig.height=6, fig.width=8}
 
 #Set up data
 industries <- unique(znormdat$subIndustry)
@@ -284,7 +282,7 @@ plotfun(m5, "random smooth, region + penalty")
 
 
 
-```{r modelplotfuns, include=FALSE, warning=TRUE, cache=T, dependson=c("packages and data", "merge data")}
+```{r modelplotfuns, include=FALSE, warning=TRUE}
 #znormdat <- read.csv("All_industries_znorm.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
 #function to summarise gam models using itsadug package
@@ -380,7 +378,7 @@ The full gamm model of z-normalised value ~ smoothed year with Region as a rando
 #### Model 2
 We then add in the autocorrelation term, and see if the model performs better. 
 
-```{r modelsgam, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm"), fig.height=6, fig.width=12}
+```{r modelsgam, include=TRUE, warning=TRUE, fig.height=6, fig.width=12}
 
 #Set up data
 industries <- unique(znormdat$subIndustry)
@@ -430,7 +428,7 @@ mod3. a gamm model of z-normalised value ~ smoothed year with Region as a random
 mod4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
 
 
-```{r models_gamm, include=TRUE, warning=TRUE, cache=F, dependson=c("packages and data", "merge data", "modelplotfuns", "znorm")}
+```{r models_gamm, include=TRUE, warning=TRUE}
 ################
 #Main processing
 ################
