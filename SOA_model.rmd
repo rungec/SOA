@@ -346,7 +346,8 @@ comparemodelsplot <- function(m1, m2){
     geom_segment(x=(min(currdf$year)+1), xend=(min(currdf$year)+3), 
              y=max(currdf$znorm)-0.4, yend=max(currdf$znorm)-0.4, 
              col="blue", inherit.aes = FALSE) +
-    theme_minimal()
+    theme_minimal() +
+    theme(legend.position="none")
 }
   
 plotmodel <- function(m1){
@@ -406,7 +407,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_1, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_1, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -455,7 +456,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_2, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_2, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -504,7 +505,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_3, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_3, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -553,7 +554,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_4, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_4, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -603,7 +604,7 @@ mod2 <- gamm(znorm ~ year, random=list(Region=~1), correlation = corAR1(form = ~
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_5, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_5, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -652,7 +653,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_6, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_6, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -703,7 +704,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_7, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_7, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -753,7 +754,7 @@ mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
-```{r models_gamm_autocorr_7b, include=FALSE, warning=TRUE}
+```{r models_gamm_autocorr_7b, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
@@ -761,7 +762,7 @@ acfplotfun(mod1) #examine the autocorrelation
 print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
 acfplotfun(mod2) #any correlation remaining?
 #compare mod1 and mod2
-comparemodelsplot(mod2$gam, mod1$gam)
+comparemodelsplot(mod2$gam, mod1$gam) 
 
 ```
 
