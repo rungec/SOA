@@ -9,15 +9,15 @@ require(tidyverse)
 require(lubridate)
 require(itsadug) #for gam visualisation
 require(mgcv) #for gam mixed effects models
-#require(broom) #for nested modelling
+require(broom) #augment
 require(modelr)
 require(gridExtra) #for grid.arrange
-require(ggfortify) #for autoplot
+#require(ggfortify) #for autoplot
 require(pander) #for pander table
 require(ggpubr) #for ggarrange
 
 #set directories
-wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
+wd = "C:/Users/cru016/Documents/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 
 #Industries
 industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells")
@@ -237,14 +237,11 @@ znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subInd
 
 ```
 
-### Random effects in gam
-specifying the correct random effects is not so straightforward
-
-```{r randomplots, include=TRUE, warning=TRUE, fig.height=6, fig.width=8}
+```{r randomplots, include=FALSE, warning=TRUE, eval=FALSE, fig.height=6, fig.width=8}
 
 #Set up data
 industries <- unique(znormdat$subIndustry)
-industries <- industries[industries!="Population"]
+#industries <- industries[industries!="Population"]
 i <- industries[1]
 #for(i in industries){
 currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
@@ -279,7 +276,6 @@ plotfun(m3, "random smooth, common smooth par")
 plotfun(m4, "random smooth, region effect")
 plotfun(m5, "random smooth, region + penalty")
 ```
-
 
 
 ```{r modelplotfuns, include=FALSE, warning=TRUE}
@@ -350,139 +346,492 @@ comparemodelsplot <- function(m1, m2){
     geom_segment(x=(min(currdf$year)+1), xend=(min(currdf$year)+3), 
              y=max(currdf$znorm)-0.4, yend=max(currdf$znorm)-0.4, 
              col="blue", inherit.aes = FALSE) +
-    theme_minimal()
+    theme_minimal() +
+    theme(legend.position="none")
 }
   
-plotmodelbyregion <- function(m1){
-  #set up data
-  pred <- predict(m1, se.fit=T)
-  #plot 
-  currdf %>% ggplot(aes(year, znorm)) +
-    geom_point() +
-    geom_ribbon(aes(ymin=pred$fit-1.96*pred$se.fit, ymax=pred$fit+1.96*pred$se.fit), alpha=0.2, fill="grey30")+
-    geom_line(aes(y=pred$fit), col="black", lwd=1) +
-    facet_wrap(~Region) +
-    theme(legend.position="none") 
+plotmodel <- function(m1){
+  preds <- predict(m1, newdata=currdf, se=TRUE)
+   preds2 <- bind_cols(currdf, preds)
+  preds2 %>%  
+   ggplot(aes(x=year, y=znorm)) +
+    geom_point(aes(col=Region)) +
+    geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=fit), col="black") +
+    #facet_wrap(~Region) +
+    #theme(legend.position="none") +
+    theme_minimal()
  } 
+
+plotmodelbyregion <- function(m1){
+ preds <- predict(m1, newdata=currdf, se=TRUE)
+ preds2 <- bind_cols(currdf, preds)
   
+  preds2 %>% ggplot(aes(x=year, y=znorm)) +
+    geom_point(col="darkslategray2") +
+    geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=fit), col="black", lwd=0.7) +
+    facet_wrap(~Region) +
+    theme_light() +
+    theme(legend.position="none", panel.grid=element_blank(), strip.text = element_text(colour = "black"))
+ }  
  
 ```
 
-
-### Models using 'GAM' function
-We test 2 models:   
+### Models using 'GAMM' function
+We test 2 models for each industry:  
 
 #### Model 1
-The full gamm model of z-normalised value ~ smoothed year with Region as a random effect (random slope and intercept), and with an autocorrelation AR term with lag=1. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
+A gamm model of z-normalised value ~ smoothed year with Region as a random effect. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
 
 #### Model 2
 We then add in the autocorrelation term, and see if the model performs better. 
+mod2 = model with autoregressive process of order 1
 
-```{r modelsgam, include=TRUE, warning=TRUE, fig.height=6, fig.width=12}
+### Cruise Tourism
 
-#Set up data
-industries <- unique(znormdat$subIndustry)
-industries <- industries[industries!="Population"]
-i <- industries[1]
-#for(i in industries){
-currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
-print(as.character(i))
-
-#Model 1
-mod1 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), data=currdf) #fs or re?? I don't think the random componenets are specified correctly
-itsadugsummary(mod1)
-
-
-#Model 2 with autocorrelation
-#choose the rho value of the temporal autocorrelation
-rhoval <- acf(resid(mod1), plot=FALSE)$acf[2]
-mod2 <- gam(znorm ~ s(year) + s(year, Region, bs='fs'), rho=rhoval, data=currdf)
-print(summary(mod2))
-#print(compareML(mod1, mod2))
-par(mfrow=c(1,2))
-acf(resid(mod2), lag=20, main="ACF Model 2")
-pacf(resid(mod2), lag=20, main="PACF Model 2")
+```{r models_gamm_setup_1, include=FALSE, warning=TRUE}
 
 #https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
 #https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
 
-
-```
-
-### Models using 'GAMM' function
-We test 4 models:  
-
-#### Model 1
-A gam model of z-normalised value ~ smoothed year. We look at the ACF plots and Ljung-Box test to see if there is any significant temporal autocorrelation (remembering that by chance we expect 1 out of every 20 sample autocorrelations to exceed the 95% bounds (the blue dotted lines)) 
-
-#### Model 2
-We then add in the autocorrelation term, and see if the model performs better. We compare two correlation structures
-mod2a = model with autoregressive process of order 1
-mod2b = model with autoregressive moving average process of order 1
-mod2c = model with autoregressive moving average process of order 1
-
-#### Model 3
-mod3. a gamm model of z-normalised value ~ smoothed year with Region as a random effect, and look for autocorrelation.  
-
-#### Model 4
-mod4. the full gamm model of z-normalised value ~ smoothed year with Region as a random effect, and with an autocorrelation term with lag=1.
-
-
-```{r models_gamm, include=TRUE, warning=TRUE}
-################
-#Main processing
-################
-industries <- unique(znormdat$subIndustry)
-industries <- industries[industries!="Population"]
-i <- industries[1]
-#for(i in industries){
+i <- unique(znormdat$subIndustry)[1]
 
 currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
-print(as.character(i))
-
 #Basic model, ignoring temporal autocorrelation
-mod1 <- gamm(znorm ~ s(year), random=NULL, correlation=NULL, data=currdf)
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_1, include=TRUE, warning=TRUE}
 acfplotfun(mod1) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
 ## if it seems like ACF drops off slowly - ARMA terms probably best
 print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
-
-#Add in temporal autocorrelation with 1yr lag
-mod2a <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year | Region), data=currdf)
-mod2b <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=1), data=currdf) #1yr lag
-mod2c <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year | Region, p=2), data=currdf) #2yr lag
-print(anova(mod2a$lme, mod2b$lme, mod2c$lme)) #any difference?
-print(anova(mod2a$lme, mod1$lme)) #any difference?
-acfplotfun(mod2a) #any correlation remaining?
-
+acfplotfun(mod2) #any correlation remaining?
 #compare mod1 and mod2
-comparemodelsplot(mod2a$gam, mod1$gam)
-plot(mod2a$gam, residuals = TRUE, pch = 19, cex = 0.75)
-#Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval
-
-#add a random intercept
-mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year | Region), data=currdf)
-plot(mod3$gam, residuals = TRUE, pch = 19, cex = 0.75)
-print(summary(mod3$lme))
-print(summary(mod3$gam))
-print(summary(mod3$lme))
-print(anova(mod3$gam) )
-
-#add a random correlated slope and intercept
-mod4 <- gamm(znorm ~ s(year), random=list(Region=~1, Region=~year), correlation = corAR1(form = ~ year | Region), data=currdf)
-plot(mod4$gam, residuals = TRUE, pch = 19, cex = 0.75)
-print(summary(mod4$gam))
-print(summary(mod4$lme))
-print(anova(mod4$lme) )
-plotmodelbyregion(mod4$gam)
-comparemodelsplot(mod3$gam, mod4$gam)
-print(anova(mod4$lme, mod1$lme))
-
-#NEXT STEPS
-# adjust k value and bs, and test method=REML
-# use this methods https://www.fromthebottomoftheheap.net/2011/06/12/additive-modelling-and-the-hadcrut3v-global-mean-temperature-series/ to see if changes are significant
-#figure out how to add error bars
-
+comparemodelsplot(mod2$gam, mod1$gam)
 
 ```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_1, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Domestic tourism
+
+```{r models_gamm_setup_2, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[2]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_2, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_2, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### International tourism
+
+```{r models_gamm_setup_3, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[3]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_3, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_3, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam) 
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Population
+
+```{r models_gamm_setup_4, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[4]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_4, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_4, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam) + theme(legend.position = "none")
+plotmodel(mod2$gam) + theme(legend.position = "none") + facet_wrap(~Country)
+
+```
+
+### Shipping distance
+Because we don't have so much data, we use a linear model (no smooth) with AR(1) correlation. We drop the datapoint for 2018, as it is incomplete.
+
+```{r models_gamm_setup_5, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[5]
+
+currdf <- znormdat %>% filter(subIndustry==i & year<2018) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ year, random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ year, random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_5, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_5, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+#plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+#plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Hunters
+
+```{r models_gamm_setup_6, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[6]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_6, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_6, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Fishing
+
+All fishing since 1960
+
+```{r models_gamm_setup_7, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[7]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_7, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_7, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Fishing
+modelling only just data for 1990 onwards
+
+```{r models_gamm_setup_7b, include=FALSE, warning=TRUE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[7]
+
+currdf <- znormdat %>% filter(subIndustry==i, year>1990) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_7b, include=TRUE, warning=TRUE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam) 
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_7b, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Oil and gas
+We need to work out how to model this, as it is a cumulative sum...
+
+
+```{r models_gamm_setup_8, include=FALSE, warning=TRUE, eval=FALSE}
+
+#https://stats.stackexchange.com/questions/335883/specifying-generalized-additive-models-in-r-using-the-mgcv-package
+#https://cran.r-project.org/web/packages/itsadug/vignettes/test.html
+
+i <- unique(znormdat$subIndustry)[8]
+
+currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+```
+
+#### Autocorrelation check
+We first check for autocorrelation, then run compare models with and without AR(1) residuals.
+
+```{r models_gamm_autocorr_8, include=FALSE, warning=TRUE, eval=FALSE}
+acfplotfun(mod1) #examine the autocorrelation
+# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
+## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
+## if it seems like ACF drops off slowly - ARMA terms probably best
+print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2) #any correlation remaining?
+#compare mod1 and mod2
+comparemodelsplot(mod2$gam, mod1$gam)
+
+```
+
+#### Model summary
+Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
+
+```{r models_gamm_summary_8, include=TRUE, warning=TRUE, eval=FALSE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
