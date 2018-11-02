@@ -199,7 +199,7 @@ plotfunIntensity <- function(map_data, mapped_col, pretty_breaks, mycols, ndecim
 #read in template
   template <- read_sf(dsn=datawd, layer="SOA_borders_for_tourism2")
 #read in table
-  tbl <- read.csv(paste0(wd, "/Tables/Cruise_tourism_summarystats.csv"))
+  tbl <- read.csv(paste0(wd, "/Intermediate/Cruise_tourism_summarystats.csv"))
 #manipulate table
   #extract only passenger numbers
   tbl_ed <- tbl[tbl$Metric=="Passengers", ] 
@@ -249,7 +249,7 @@ plotfunIntensity(map_data=cruise_data,
   #read in template
   template <- read_sf(dsn=datawd, layer="SOA_borders_for_tourism2")
   #read in table
-  tbl <- read.csv(paste0(wd, "/Tables/Domestic_tourism_summarystats.csv"))
+  tbl <- read.csv(paste0(wd, "/Intermediate/Domestic_tourism_summarystats.csv"))
   #manipulate table
   #NA
   #merge table to sf
@@ -294,7 +294,7 @@ plotfunIntensity(map_data=cruise_data,
   #read in template
   template <- read_sf(dsn=datawd, layer="SOA_borders_for_tourism2")
   #read in table
-  tbl <- read.csv(paste0(wd, "/Tables/International_tourism_summarystats.csv"))
+  tbl <- read.csv(paste0(wd, "/Intermediate/International_tourism_summarystats.csv"))
   #manipulate table
   #NA
   #merge table to sf
@@ -339,7 +339,7 @@ plotfunIntensity(map_data=cruise_data,
   #read in template
   template <- read_sf(dsn=datawd, layer="SOA_borders_for_tourism2")
   #read in table
-  tbl <- read.csv(paste0(wd, "/Tables/Hunters_summarystats.csv"))
+  tbl <- read.csv(paste0(wd, "/Intermediate/Hunters_summarystats.csv"))
   #manipulate table
   tbl_ed <- tbl[tbl$Metric %in% c("All hunting/trapping/fishing licenses", "Number of hunters who paid game management fees", 
                                   "Registered hunters", "Paid hunting permits", "Sports hunters"), ] 
@@ -386,7 +386,7 @@ plotfunIntensity(map_data=cruise_data,
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_popn2")
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Population_summarystats.csv"))
+tbl <- read.csv(paste0(wd, "/Intermediate/Population_summarystats.csv"))
 #manipulate table
 #NA
 #merge table to sf
@@ -430,7 +430,7 @@ plotfunGrowth(map_data=popn_data,
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas1")
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Oilandgas_wells_summarystats.csv"))
+tbl <- read.csv(paste0(wd, "/Intermediate/Oilandgas_wells_summarystats.csv"))
 #manipulate table
 tbl_ed <- tbl[tbl$Metric=="All", ] #both development and exploration wells
 #merge table to sf
@@ -505,7 +505,7 @@ plotfunIntensity(map_data=wells_data,
 #OIL AND GAS Time series----
 #Exploration and Development across time
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Oilandgas_wells_long.csv"), fileEncoding = "UTF-8-BOM")
+tbl <- read.csv(paste0(wd, "/Intermediate/Oilandgas_wells_long.csv"), fileEncoding = "UTF-8-BOM")
 tbl2 <- tbl[tbl$Region != "All", ] %>% droplevels()
 tbl3 <- tbl2 %>% filter(Metric=="All") %>% group_by(Country, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
 
@@ -580,13 +580,115 @@ p <- ggplot(tbl5, aes(x=year, y=nwells, fill=Metric)) +
 
 ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries_marine.png"), p)
 
+#####################
+#MINING ----
+
+#Plot number of mines operating in each year
+#load and summarise data
+minesOp <- read.csv("Intermediate/Mining_nmines_operational_byyear.csv", header=TRUE)
+plotdfOp <- minesOp %>% group_by(Country, year) %>% summarise(nmines=sum(nmines))
+#change order of levels
+plotdfOP$Country <- factor(plotdfOP$Country, levels=rev(c("Greenland", "Canada", "USA", "Finland", "Norway", "Sweden", "Russia")))
+
+#Plot
+p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country, col=Country)) + 
+  geom_area(stat='identity', position='identity', alpha=0.6) +
+  geom_line(alpha=0.6) +
+  coord_cartesian(xlim=c(1900, 2017), expand=FALSE) + 
+  #scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Number of mines in operation") +
+  theme_minimal() +
+  theme(legend.position="bottom") +
+  scale_fill_manual(values = rev(viridisLite::magma(9)[2:8]),
+                    name = element_blank(), 
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30/length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = F, label.position = "bottom")) +
+  scale_colour_manual(values = rev(viridisLite::magma(9)[2:8]), guide = "none")
+ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_operational.png"), p)
+
+#Stacked plot
+p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country)) + 
+  geom_area(position='stack', alpha=0.6) +
+  geom_line(alpha=0.6, position='stack') +
+  coord_cartesian(xlim=c(1900, 2017), expand=FALSE) + 
+  #scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Number of mines in operation") +
+  theme_minimal() +
+  theme(legend.position="bottom") +
+  scale_fill_manual(values = rev(viridisLite::magma(9)[2:8]),
+                    name = element_blank(), 
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30/length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = F, label.position = "bottom")) +
+  scale_colour_manual(values = rev(viridisLite::magma(9)[2:8]), guide = "none")
+ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_operational_stacked.png"), p)
+
+#Plot of how long mines have been in feasibility/conception
+#load and summarise data
+minesExpl <- read.csv("Intermediate/Mining_nmines_exploration_byyear.csv", header=TRUE)
+plotdfEx <- minesExpl %>% group_by(Country, year) %>% summarise(nmines=sum(nmines))
+#change order of levels
+plotdfEx$Country <- factor(plotdfEx$Country, levels=c("Greenland", "Canada", "USA", "Finland", "Norway", "Sweden", "Russia"))
+
+#Plot
+p <- ggplot(plotdfEx, aes(x=year, y=nmines, fill=Country)) + 
+  geom_area(stat='identity', position='identity', alpha=0.6) +
+  coord_cartesian(xlim=c(1960, 2017), expand=FALSE) + 
+  scale_x_reverse() +
+  #scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Number of mines") +
+  theme_minimal() +
+  theme(legend.position="bottom") +
+  scale_fill_manual(values = rev(viridisLite::magma(9)[2:8]),
+                    name = element_blank(), 
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30/length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = F, label.position = "bottom"))
+ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_exploration.png"), p)
+
+#Lollipot Plot of how long mines have been in feasibility/conception
+mines <- read.csv("Intermediate/Mining_listofMines_withdates.csv", header=TRUE)
+minesub <- mines %>% filter(Status=="Exploration") 
+minesub$Country <- factor(minesub$Country, levels=rev(c("Greenland", "Canada",  "Russia", "Finland", "Sweden", "USA", "Norway")))
+minesub <- arrange(minesub, Country, desc(Start))
+minesub$x <- 1:nrow(minesub)
+
+p <- ggplot(minesub) + 
+  geom_segment(aes(x=x, xend=x, y=Start, yend=Stop, color=Country), size=1) +
+  #geom_point(aes(x=x, y=Start, color=Country), size=2) +
+  #geom_point(aes(x=x, y=Stop, color=Country), size=2) +
+  coord_flip() +
+  #facet_wrap(~Country, ncol=1, strip.position = "left")
+  xlab("") + ylab("Year") +
+  theme_minimal() +
+  theme(legend.position="right", axis.text.y=element_blank()) +
+  scale_color_manual(values = viridisLite::magma(9)[2:8],
+                     name = element_blank()) 
+ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_exploration_bar.png"), p)
+
 
 #####################
 #FISHING ----
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_fishing")
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Fishing_summarystats.csv"))
+tbl <- read.csv(paste0(wd, "/Intermediate/Fishing_summarystats.csv"))
 #manipulate table
 #NA
 #merge table to sf
@@ -631,7 +733,7 @@ plotfunGrowth(map_data=fishing_data,
 #read in template
 template <- read_sf(dsn=datawd, layer="EEZ_plus_highseas_noland")
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Shipping_distance_summarystats.csv"))
+tbl <- read.csv(paste0(wd, "/Intermediate/Shipping_distance_summarystats.csv"))
 #manipulate table
 tbl_ed <- tbl[tbl$Metric == "All", ]
 #merge table to sf
@@ -765,7 +867,7 @@ plotfunGrowth(map_data=shipping_data,
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_shippingvol")
 #read in table
-tbl <- read.csv(paste0(wd, "/Tables/Shipping_volume_summarystats.csv"))
+tbl <- read.csv(paste0(wd, "/Intermediate/Shipping_volume_summarystats.csv"))
 #manipulate table
 tbl_ed <- tbl[tbl$Metric == "goods", ]
 #merge table to sf
@@ -809,8 +911,7 @@ ggplot(cruisetourism) +
   geom_sf(data=amap, fill="grey95", color=NA) + #add amap
   geom_sf(data=cruisetourism, aes(fill=AnnGrowth_12_17), color=NA, show.legend=TRUE) +
   #scale_fill_viridis_c(option="magma", direction=-1, 
-  name="Annual passengers, thousand", labels = scales::comma,
-na.value="grey80") +
+  name="Annual passengers, thousand", labels = scales::comma, na.value="grey80") +
   #labs(x = NULL, y = NULL, 
   # title = "Arctic cruise tourism",
   #subtitle = "",
