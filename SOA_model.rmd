@@ -17,10 +17,11 @@ require(pander) #for pander table
 require(ggpubr) #for ggarrange
 
 #set directories
-wd = "C:/Users/cru016/Documents/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
+#wd = "C:/Users/cru016/Documents/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
+wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 
 #Industries
-industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells")
+industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells", "Mining", "Reindeer")
 
 #a function to change the plot sizes
 subchunkify <- function(g, fig_height=7, fig_width=5) {
@@ -49,6 +50,7 @@ alldat <- lapply(industries, function(i) {
     dat <- read.csv(paste0(wd, "/", i, "_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
     dat$value_raw <- dat$value
     dat$subIndustry <- i
+   
     if(i %in% c("Cruise_tourism", "Domestic_tourism", "International_tourism")){
         dat$Industry <- "Tourism"
     } else {
@@ -64,7 +66,7 @@ alldat <- lapply(industries, function(i) {
         dat$value[dat$value==0] <- 1 #add small constant to make growth rate calculation possible
         
       } 
-    
+
       if(i == "Fishing"){ 
         dat <- dat %>% filter(Region!="Total") 
       } 
@@ -111,7 +113,7 @@ alldat <- bind_rows(alldat)
 alldat$Country[alldat$Country %in% c("Svalbard & Jan Mayen", "Svalbard and Jan Mayen")] <- "Svalbard"
 alldat <- alldat %>% mutate_at(c("Country", "Region", "Industry", "subIndustry"), funs(factor)) %>% #convert to factors
                     filter(!is.na(value)) #drop NAs
-write_excel_csv(alldat, "All_industries_long.csv") #for fileEncoding = "UTF-8-BOM"
+write_excel_csv(alldat, paste0(dirname(wd), "/Model/All_industries_long.csv")) #for fileEncoding = "UTF-8-BOM"
 
 ```
 
@@ -138,7 +140,7 @@ oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>%
 #replace oil and gas values with these new values
 intensitydf <- bind_rows(intensitydf, oilintensity)
 intensitydf <- intensitydf %>% drop_na() %>% droplevels()
-write_excel_csv(intensitydf, "All_industries_intensity.csv") #for fileEncoding = "UTF-8-BOM"
+write_excel_csv(intensitydf, paste0(dirname(wd), "/Model/All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
 
 ```
 
@@ -233,7 +235,7 @@ n <- alldat %>% filter(!is.na(value)) %>%
 dropregions <- n[n$n <= 3, ] #drop with 3 or fewer observations
 znormdat <- znormdat[!(znormdat$Region %in% dropregions$Region & znormdat$subIndustry %in% dropregions$subIndustry), ]
 
-#write_excel_csv(znormdat, "All_industries_znorm.csv") #for fileEncoding = "UTF-8-BOM"
+write_excel_csv(znormdat, paste0(dirname(wd), "/Model/All_industries_znorm.csv")) #for fileEncoding = "UTF-8-BOM"
 
 ```
 
@@ -620,6 +622,40 @@ comparemodelsplot(mod2$gam, mod1$gam)
 Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
 
 ```{r models_gamm_summary_5, include=TRUE, warning=TRUE}
+
+print(summary(mod2$lme))
+print(summary(mod2$gam))
+print(anova(mod2$gam) )
+print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+
+par(mfrow=c(1,2))
+#plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+#plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod2$gam)
+plotmodelbyregion(mod2$gam)
+
+```
+
+### Shipping trafficwork
+```{r models_gamm_setup_5b, include=FALSE, warning=TRUE}
+
+currdf <- read.csv(paste0(wd, "/Shipping_trafficwork_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+#znorm
+currdf$value_raw <- currdf$value
+currdf <- currdf %>%  filter(!is.na(value)) %>% #drop years missing data
+  group_by(Region, year) %>% 
+  summarise(value = sum(value))
+currdf <- currdf %>%
+  mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
+  
+#Basic model, ignoring temporal autocorrelation
+mod1 <- gamm(znorm ~ year, random=list(Region=~1), correlation=NULL, data=currdf)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ year, random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)   
+```
+#### Model summary
+
+```{r models_gamm_summary_5b, include=TRUE, warning=TRUE}
 
 print(summary(mod2$lme))
 print(summary(mod2$gam))
