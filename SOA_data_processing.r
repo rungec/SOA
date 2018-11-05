@@ -22,7 +22,7 @@ shipdist$Country <- as.factor(shipdist$Country)
 shipdist$Region <- as.factor(shipdist$region)
 shipdist$Metric <- as.factor(shipdist$ShipCat)
 shipdist$ShipWt <- as.factor(shipdist$shipweight)
-write_excel_csv(shipdist, "Intermediate/Shipping_distance_long.csv")
+write_excel_csv(shipdist, "Intermediate/Shipping_trafficwork_long.csv")
 
 #Ship vol
 shipvol <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_voltransported", range="A1:AB26")
