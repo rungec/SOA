@@ -9,27 +9,25 @@ wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis"
 setwd(wd)
 
 #Ship dist
-shipdist <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_distancesailed", range="A1:J92")
+shipdist <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_distancesailed", range="A1:J81")
 shipdist$Country <- as.factor(shipdist$Country)
 shipdist$Region <- as.factor(shipdist$region)
 shipdist$Metric <- as.factor(shipdist$ShipCat)
-shipdist_long <- gather(shipdist, key=year, value=value, "X2012":"X2018")
+shipdist_long <- gather(shipdist, key=year, value=value, "2012":"2018")
 write_excel_csv(shipdist_long, "Intermediate/Shipping_distance_long.csv")
 
 #Ship trafficwork
-shipdist <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_trafficwork", range="A1:H3676")
-shipdist$Country <- as.factor(shipdist$Country)
-shipdist$Region <- as.factor(shipdist$region)
-shipdist$Metric <- as.factor(shipdist$ShipCat)
-shipdist$ShipWt <- as.factor(shipdist$shipweight)
-write_excel_csv(shipdist, "Intermediate/Shipping_trafficwork_long.csv")
+shiptraff <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_trafficwork", range="A1:H3676")
+shiptraff <- shiptraff[shiptraff$Year < 2018, c("Country", "region", "shipweight", "ShipCat", "Year", "traffic_work_gTnm")]
+names(shiptraff) <- c("Country", "Region", "Shipweight", "ShipCat", "year", "value")
+write_excel_csv(shiptraff, "Intermediate/Shipping_trafficwork_long.csv")
 
 #Ship vol
 shipvol <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_voltransported", range="A1:AB26")
 shipvol$Country <- as.factor(shipvol$Country)
 shipvol$Metric <- as.factor(shipvol$Cargo)
 shipvol$Region <- as.factor(shipvol$Region)
-shipvol_long <- gather(shipvol, key=year, value=value, "X1991":"X2016")
+shipvol_long <- gather(shipvol, key=year, value=value, "1991":"2016")
 write_excel_csv(shipvol_long, "Intermediate/Shipping_volume_long.csv")
 
 #population
