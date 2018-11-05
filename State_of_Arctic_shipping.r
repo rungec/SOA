@@ -55,6 +55,22 @@ t02 <- shipdatdf %>% group_by(region, Year) %>%
       spread(Year, dist_sailed) %>% data.frame()
 write.csv(t02, "intermediate/DistancesSailed_byregion_year.csv", row.names=FALSE)
 
+#Summarise and export shiptraffic
+weight_lookup <- data.frame(shipweight=c("<1000 GT", ">=100000 GT", "1000-4999 GT", "10000-24999 GT", "25000-49999 GT", "5000-9999 GT", "50000-99999 GT"), 
+                            shipweight_mid=c(1000, 100000, 3000, 17500, 37500, 7500, 75000), stringsAsFactors=FALSE)
+country_lookup <- data.frame(region=c("AlaskanEEZ", "CanadianEEZ", "FaroesEEZ", "GreenlandEEZ", "IcelandEEZ", "JanMayenEEZ", "NorwayEEZ", "OpenArctic", "OpenBarentsSea", "OpenDavisStrait", "OpenNorthAtlantic", "OpenNorwegianSea", "RussianEEZ", "SvalbardFisheriesZone", "UKEEZ"),
+                             Country=c("USA", "Canada", "Faroe Islands", "Greenland", "Iceland", "Svalbard & Jan Mayen", "Norway", "High Seas", "High Seas", "High Seas", "High Seas", "High Seas", "Russia", "Svalbard & Jan Mayen", "UK"))
+
+shipweightdf <- shipdatdf %>% gather(shipweight, dist_sailed, "<1000 GT":">=100000 GT") 
+tsw <- shipweightdf %>% group_by(region, ShipCat, shipweight, Year) %>% 
+                summarise(dist_sailed=sum(dist_sailed)) %>% 
+                filter(region!="Total")
+#tsw <- shipweightdf %>% filter(ShipCat=="Goods transport") %>% group_by(shipweight, Year) %>% summarise(dist_sailed=sum(dist_sailed))
+tsw <- tsw %>% left_join(weight_lookup, by="shipweight") %>% #add shipweight as number (midpoint)
+               left_join(country_lookup, by="region") %>% #add country
+               mutate(traffic_work_gTnm = shipweight_mid*dist_sailed) #calculate traffic work
+
+write.csv(tsw, "ArcticShipping_byregion_vesselweight_year.csv", row.names=FALSE)
 
 
 #########################
@@ -125,15 +141,6 @@ ggplot(t4, aes(x=Year, y=dist_sailed, col=ShipCat)) +
   facet_wrap(facets="region", scale="free_y")
 
 #by ship weight
-weight_lookup <- data.frame(shipweight=c("<1000 GT", ">=100000 GT", "1000-4999 GT", "10000-24999 GT", "25000-49999 GT", "5000-9999 GT", "50000-99999 GT"), 
-                            shipweight_mid=c(1000, 100000, 3000, 17500, 37500, 7500, 75000), stringsAsFactors=FALSE)
-shipweightdf <- shipdatdf %>% gather(shipweight, dist_sailed, "<1000 GT":">=100000 GT") 
-tsw <- shipweightdf %>% filter(ShipCat=="Goods transport") %>% group_by(region, shipweight, Year) %>% summarise(dist_sailed=sum(dist_sailed))
-#tsw <- shipweightdf %>% filter(ShipCat=="Goods transport") %>% group_by(shipweight, Year) %>% summarise(dist_sailed=sum(dist_sailed))
-tsw <- tsw %>% left_join(weight_lookup, by="shipweight") %>% #add shipweight as number (midpoint)
-  mutate(traffic_work_gTnm = shipweight_mid*dist_sailed) #calculate traffic work
-write.csv(tsw, "ArcticShipping_byregion_vesselweight_year.csv", row.names=FALSE)
-
 ggplot(tsw, aes(x=Year, y=dist_sailed, col=shipweight)) +
   geom_line() +
   xlim(2012, 2017) +
