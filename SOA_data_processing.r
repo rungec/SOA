@@ -71,6 +71,7 @@ wells <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="oilandgas_well
 wells$Country <- as.factor(wells$Country)
 wells$Region <- as.factor(wells$Region)
 wells$Metric <- as.factor(wells$Type)
+wells <- wells[wells$Region!="North Sea",]
 wells_long <- gather(wells, key=year, value=value, "1920":"2018")
 write_excel_csv(wells_long, "Intermediate/Oilandgas_wells_long.csv")
 
@@ -97,6 +98,7 @@ fish <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="fishing", range
 fish$Country <- as.factor(fish$Country)
 fish$Region <- as.factor(fish$Region)
 fish$Metric <- as.factor(fish$Metric)
+fish <- fish[fish$Region!="Gulf of Alaska",]
 fish_long <- gather(fish, key=year, value=value, "1950":"2014")
 write_excel_csv(fish_long, "Intermediate/Fishing_long.csv")
 
