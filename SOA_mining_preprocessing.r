@@ -35,7 +35,8 @@ mines_region$Status[mines_region$Status %in% c("Under development", "Constructio
 mines_region$Status[mines_region$Status %in% c("Closed", "Suspended", "Care and Maintenance",  "Closed mine")] <- "Closed"
 
 #drop rows that are closed, with no closure date
-mines_region <- mines_region %>% filter(!(Status=="Closed" &  is.na(Stop)))
+mines_region <- mines_region %>% filter(!(Status=="Closed" &  is.na(Stop))) 
+mines_region <- mines_region[!with(mines_region,is.na(Start) & is.na(Start)),] #drop mines without dates
 write.csv(mines_region, "processed/Mining_listofMines_withdates.csv")
 
 #where mines are closed and have no start date, add the start date of 1900
