@@ -117,85 +117,6 @@ write_excel_csv(alldat, paste0(dirname(wd), "/Model/All_industries_long.csv")) #
 
 ```
 
-### Intensity of activities
-We calculate the intensity of each industry using the mean value across 2012-2017.  
-we use a spread of years rather than a single year to account for interannual variation and missing data.
-
-```{r intensities, include=FALSE} 
-
-intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
-  filter(year %in% 2012:2017) %>% 
-  group_by(Country, Region, Industry, subIndustry, Metric)  %>%
-  summarise(intensity=mean(value)) 
-```
-
-We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
-
-```{r fixintensity1, include=FALSE}
-oilintensity <- alldat %>%  filter(!Industry %in% c("OilandGas")) %>% 
-  filter(year %in% 1960:2017) %>% 
-  group_by(Country, Industry, subIndustry, Region, Metric)  %>%
-  summarise(intensity=sum(value_raw, na.rm=TRUE))
-
-#replace oil and gas values with these new values
-intensitydf <- bind_rows(intensitydf, oilintensity)
-intensitydf <- intensitydf %>% drop_na() %>% droplevels()
-write_excel_csv(intensitydf, paste0(dirname(wd), "/Model/All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
-
-```
-
-Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
-We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
-
-```{r, include=FALSE}
-alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
-```
-
-The plots for Domestic and International tourism and Hunters should be interpreted with caution - different countries use different metrics.  
-
-#### Domestic & International tourism
-Canada, Alaska, Russia = number of visitors    
-All other countries = guest nights 
-
-#### Hunters
-Alaska = All hunting/trapping/fishing licenses  
-Greenland = Sports hunters,  
-Norway = Registered hunters,  
-Finland & Sweden = Paid hunting permits,  
-No data for Russia, Faroes, Iceland, Canada.  
-
-```{r plot intensities, echo=FALSE, warning=FALSE, include=FALSE}
-intensitydf %>% filter(Industry=="Tourism") %>%
-ggplot(aes(x=Country, y=intensity)) +
-  geom_col() +
-  facet_wrap(~ subIndustry, scales="free_y") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
-ggplot(aes(x=Country, y=intensity)) +
-  geom_col() +
-  facet_wrap(~ subIndustry, scales="free_y") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(Industry=="Fishing") %>%
-ggplot(aes(x=Region, y=intensity)) +
-  geom_col() +
-  ggtitle("Fishing catch") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-intensitydf %>% filter(Industry=="Shipping_distance") %>%
-ggplot(aes(x=Region, y=intensity)) +
-  geom_col() +
-  ggtitle("Shipping distance") +
-  theme_minimal() +
-  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
-
-```  
-
- 
 ### Data processing:
 #### Shipping distance: 
 In some parts of the Arctic there is no shipping in certain years (e.g. Davis Sea in 2012). I added a small constant (1) to these numbers, because log10(0) evaluates to -Inf, which can't be modelled.
@@ -204,7 +125,8 @@ In some parts of the Arctic there is no shipping in certain years (e.g. Davis Se
 We calculate annual activity in oil and gas from the cumulative number of wells drilled across time, as activity is intermittent (lots of years with no wells drilled). This gives growth rates of zero in years with no activity, rather than growth rates of Inf. This can be loosely taken as a measure of the growth (both rise and fall) in the industry across time.
 
 #### Cruise tourism
-Murmansk values adjustment described above makes no difference to the znorm.
+Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
+We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
 
 #### Normalisation
 Since different metrics are used within an industry across the Arctic (e.g. guest nights vs number of visitors) we z-score standardise the values (subtract mean of all datapoints for an individual point, then divide by standard deviation of all points). In order to have robust estimates, we dropped regions where we could only find data for 3 or fewer years (e.g. cruise tourism in Sakha, n=2).
