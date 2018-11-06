@@ -1,0 +1,186 @@
+
+---
+title: "State of Arctic intensity adjustment"
+output: html_document
+---
+  
+```{r packages and data, include=FALSE}
+
+require(sf)
+require(tidyverse)
+```
+
+### Intensity of activities
+We calculate the intensity of each industry using the mean value across 2012-2017.  
+we use a spread of years rather than a single year to account for interannual variation and missing data.
+
+```{r intensities, include=FALSE} 
+alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_long.csv", header=TRUE)
+
+intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
+  filter(year %in% 2012:2017) %>% 
+  group_by(Country, Region, Industry, subIndustry, Metric)  %>%
+  summarise(intensity=mean(value)) 
+```
+
+We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
+
+```{r fixintensity1, include=FALSE}
+oilintensity <- alldat %>%  filter(Industry %in% c("OilandGas")) %>% 
+  filter(year %in% 1960:2017) %>% 
+  group_by(Country, Industry, subIndustry, Region, Metric)  %>%
+  summarise(intensity=sum(value_raw, na.rm=TRUE))
+
+#replace oil and gas values with these new values
+intensitydf <- bind_rows(intensitydf, oilintensity)
+intensitydf <- intensitydf %>% drop_na() %>% droplevels()
+write_excel_csv(intensitydf, paste0(dirname(wd), "/Model/All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
+
+```
+
+Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
+We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers). This makes no difference to the zscore, but puts the intensity on the same scale as other regions. This gives higher than expected cruise passengers - same intensity as Troms...
+
+```{r, include=FALSE}
+alldat %>% filter(subIndustry=="Cruise_tourism" & Region %in% c("Murmansk", "Troms", "Finnmark", "Arkhangel'sk") & year==2016) %>% select(Region, value)
+```
+
+The plots for Domestic and International tourism and Hunters should be interpreted with caution - different countries use different metrics.  
+
+#### Domestic & International tourism
+Canada, Alaska, Russia = number of visitors    
+All other countries = guest nights 
+
+#### Hunters
+Alaska = All hunting/trapping/fishing licenses  
+Greenland = Sports hunters,  
+Norway = Registered hunters,  
+Finland & Sweden = Paid hunting permits,  
+No data for Russia, Faroes, Iceland, Canada.  
+
+
+```{r loadshps, include=FALSE}
+area_tourism <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_tourism2.shp") 
+  st_geometry(area_tourism) <- NULL
+  area_tourism[area_tourism$Region=="Northern Ostrobothnia", "Region"] <- "North Ostrobothnia"
+  area_tourism[area_tourism$Region=="Svalbard & Jan Mayen", "Region"] <- "Svalbard and Jan Mayen"
+  area_tourism <- area_tourism %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+area_cruise <- read.csv("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/Arctic_coastlines.csv", header=TRUE)
+area_popn <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_popn2.shp")
+  st_geometry(area_popn) <- NULL
+  area_popn <- area_popn %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+  area_popn[area_popn$Region=="Northern Ostrobothnia", "Region"] <- "North Ostrobothnia"
+  area_popn[area_popn$Region=="Svalbard & Jan Mayen", "Region"] <- "Svalbard and Jan Mayen"
+  area_popn <- area_popn %>% bind_rows(area_tourism[area_tourism$Region=="Alaska",])
+area_eez <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/EEZ_plus_highseas_noland.shp")
+  st_geometry(area_eez) <- NULL
+  area_eez <- area_eez %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+  area_eez[area_eez$Region=="OpenDavisStraight" & !is.na(area_eez$Region), "Region"] <- "OpenDavisStrait"
+area_fishing <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_fishing.shp")
+  st_geometry(area_fishing) <- NULL
+  area_fishing[area_fishing$Region=="Fareo Plateau", "Region"] <- "Faroe Plateau"
+  area_fishing <- area_fishing %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+area_mining <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining.shp") 
+  st_geometry(area_mining) <- NULL
+  area_mining <- area_mining %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+area_mining2 <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining2.shp") 
+  st_geometry(area_mining2) <- NULL
+  area_mining2 <- area_mining2 %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+
+intensitydf <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity.csv", header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE) #for fileEncoding = "UTF-8-BOM"
+```
+
+```{r adjustintensity, include=FALSE}
+#Hunters
+hunters <- intensitydf %>% filter(Industry=="Hunters") %>% 
+            left_join(area_mining, by="Region") %>% 
+            mutate(adj_intensity = intensity/Area_km)
+
+#population
+popn <- intensitydf %>% filter(Industry=="Population") %>%
+          left_join(area_popn, by="Region") %>% 
+          mutate(adj_intensity = intensity/Area_km)
+
+#Mining
+mining <- intensitydf %>% filter(Industry=="Mining") %>%
+      left_join(area_mining2, by="Region") %>% 
+      mutate(adj_intensity = 1000*intensity/Area_km)
+
+#Oil and gas
+oilandgas <- intensitydf %>% filter(Industry=="OilandGas") %>%
+      mutate(Region=replace(Region, Region=="Chukchi Sea", "Northern Bering - Chukchi Seas")) %>%
+      mutate(Region=replace(Region, Country=="Greenland" & Region=="Offshore", "Greenland Sea")) %>%
+      mutate(Region=replace(Region, Country=="Greenland" & Region=="Onshore", "Greenland")) %>%
+      mutate(Region=replace(Region, Country=="United Kingdom", "UKEEZ")) %>%
+      mutate(Region=replace(Region, Region=="Labrador offshore", "Newfoundland-Labrador Shelf")) %>%
+      mutate(Region=replace(Region, Region=="NWT", "Northwest Territories")) %>%
+     left_join(area_fishing, by="Region") %>% 
+     left_join(area_mining, by="Region") %>% 
+     left_join(area_eez, by="Region") %>% 
+      mutate(Area_km = rowSums(.[7:9], na.rm=TRUE)) %>%
+      select(-c(Area_km.x, Area_km.y)) %>%
+      mutate(adj_intensity = 1000*intensity/Area_km)
+
+#reindeer
+#reindeer <- intensitydf %>% filter(Industry=="Reindeer") %>%
+ # left_join(area_mining, by="Region") %>% 
+  #mutate(adj_intensity = intensity/Area_km)
+
+#Shipping_distance
+shipping <- intensitydf %>% filter(Industry=="Shipping_distance") %>%
+  left_join(area_eez, by="Region") %>% 
+  mutate(adj_intensity = intensity/Area_km)
+
+#Fishing
+fishing <- intensitydf %>% filter(Industry=="Fishing") %>%
+  left_join(area_fishing, by="Region") %>% 
+  mutate(adj_intensity = intensity/Area_km)
+
+#Tourism
+tourism <- intensitydf %>% filter(subIndustry %in% c("International_tourism","Domestic_tourism")) %>%
+  left_join(area_tourism, by="Region") %>% 
+  mutate(adj_intensity = intensity/Area_km)
+
+#cruise tourism by coastline
+cruise <- intensitydf %>% filter(subIndustry=="Cruise_tourism") %>%
+  left_join(area_cruise, by="Region") %>% 
+  mutate(adj_intensity = intensity/Area_km)
+
+#Save
+intensitydf_new <- bind_rows(hunters, popn, reindeer, mining, oilandgas, shipping, fishing, tourism, cruise)
+write.csv(intensitydf_new, "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity_perkm.csv", row.names=TRUE)
+```
+
+# PLOT
+```{r plot, include=TRUE}
+#load data adjusted by area
+intensitydf <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity_perkm.csv",  header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+
+intensitydf %>% filter(Industry=="Tourism") %>%
+  ggplot(aes(x=Country, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ subIndustry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
+  ggplot(aes(x=Country, y=intensity)) +
+  geom_col() +
+  facet_wrap(~ subIndustry, scales="free_y") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Fishing") %>%
+  ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  ggtitle("Fishing catch") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+
+intensitydf %>% filter(Industry=="Shipping_distance") %>%
+  ggplot(aes(x=Region, y=intensity)) +
+  geom_col() +
+  ggtitle("Shipping distance") +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
+```
