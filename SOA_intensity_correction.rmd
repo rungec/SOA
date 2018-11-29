@@ -8,6 +8,7 @@ output: html_document
 
 require(sf)
 require(tidyverse)
+wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/"
 ```
 
 ### Intensity of activities
@@ -15,15 +16,15 @@ We calculate the intensity of each industry using the mean value across 2012-201
 we use a spread of years rather than a single year to account for interannual variation and missing data.
 
 ```{r intensities, include=FALSE} 
-alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_long.csv", header=TRUE)
+alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
-intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas")) %>% #drop years missing data
+intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas", "Mining")) %>% #drop years missing data
   filter(year %in% 2012:2017) %>% 
   group_by(Country, Region, Industry, subIndustry, Metric)  %>%
   summarise(intensity=mean(value)) 
 ```
 
-We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017.
+We calculate the intensity for oil and gas diffently, as the total number of wells drilled between 1960 and 2017, and for mining as the total number of mines active at any time during 1960 and 2017.
 
 ```{r fixintensity1, include=FALSE}
 oilintensity <- alldat %>%  filter(Industry %in% c("OilandGas")) %>% 
@@ -31,10 +32,20 @@ oilintensity <- alldat %>%  filter(Industry %in% c("OilandGas")) %>%
   group_by(Country, Industry, subIndustry, Region, Metric)  %>%
   summarise(intensity=sum(value_raw, na.rm=TRUE))
 
+miningintensity <- read.csv("D:/Box Sync/Arctic/Data/Landuse/Mining/Ojas_mining_database_2018/processed/Mining_listofMines_withdates.csv")
+miningintensity <- miningintensity %>% 
+    filter(Status!="Exploration" & is.na(Stop)|Stop>=1960) %>%
+    group_by(Country, Region) %>% 
+    summarise(intensity=n_distinct(X)) %>%
+    mutate(Industry="Mining",
+           subIndustry="Mining", 
+           Metric="Operational_mines")
+
+
 #replace oil and gas values with these new values
-intensitydf <- bind_rows(intensitydf, oilintensity)
+intensitydf <- bind_rows(intensitydf, oilintensity, miningintensity)
 intensitydf <- intensitydf %>% drop_na() %>% droplevels()
-write_excel_csv(intensitydf, paste0(dirname(wd), "/Model/All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
+write_excel_csv(intensitydf, paste0(wd, "All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
 
 ```
 
@@ -87,7 +98,7 @@ area_mining2 <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_
   st_geometry(area_mining2) <- NULL
   area_mining2 <- area_mining2 %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
 
-intensitydf <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity.csv", header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE) #for fileEncoding = "UTF-8-BOM"
+intensitydf <- read.csv(paste0(wd, "All_industries_intensity.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE) #for fileEncoding = "UTF-8-BOM"
 ```
 
 ```{r adjustintensity, include=FALSE}
@@ -121,11 +132,6 @@ oilandgas <- intensitydf %>% filter(Industry=="OilandGas") %>%
       select(-c(Area_km.x, Area_km.y)) %>%
       mutate(adj_intensity = 1000*intensity/Area_km)
 
-#reindeer
-#reindeer <- intensitydf %>% filter(Industry=="Reindeer") %>%
- # left_join(area_mining, by="Region") %>% 
-  #mutate(adj_intensity = intensity/Area_km)
-
 #Shipping_distance
 shipping <- intensitydf %>% filter(Industry=="Shipping_distance") %>%
   left_join(area_eez, by="Region") %>% 
@@ -144,40 +150,40 @@ tourism <- intensitydf %>% filter(subIndustry %in% c("International_tourism","Do
 #cruise tourism by coastline
 cruise <- intensitydf %>% filter(subIndustry=="Cruise_tourism") %>%
   left_join(area_cruise, by="Region") %>% 
-  mutate(adj_intensity = intensity/Area_km)
+  mutate(adj_intensity = intensity/Coastline_km)
 
 #Save
-intensitydf_new <- bind_rows(hunters, popn, reindeer, mining, oilandgas, shipping, fishing, tourism, cruise)
-write.csv(intensitydf_new, "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity_perkm.csv", row.names=TRUE)
+intensitydf_new <- bind_rows(hunters, popn, mining, oilandgas, shipping, fishing, tourism, cruise)
+write.csv(intensitydf_new, paste0(wd, "All_industries_intensity_perkm.csv"), row.names=TRUE)
 ```
 
 # PLOT
 ```{r plot, include=TRUE}
 #load data adjusted by area
-intensitydf <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_intensity_perkm.csv",  header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+#intensitydf <- read.csv(paste0(wd, "All_industries_intensity_perkm.csv"),  header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
 
-intensitydf %>% filter(Industry=="Tourism") %>%
+intensitydf_new %>% filter(Industry=="Tourism") %>%
   ggplot(aes(x=Country, y=intensity)) +
   geom_col() +
   facet_wrap(~ subIndustry, scales="free_y") +
   theme_minimal() +
   theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
 
-intensitydf %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
+intensitydf_new %>% filter(!Industry %in% c("Tourism", "Fishing", "Shipping_distance")) %>%
   ggplot(aes(x=Country, y=intensity)) +
   geom_col() +
   facet_wrap(~ subIndustry, scales="free_y") +
   theme_minimal() +
   theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
 
-intensitydf %>% filter(Industry=="Fishing") %>%
+intensitydf_new %>% filter(Industry=="Fishing") %>%
   ggplot(aes(x=Region, y=intensity)) +
   geom_col() +
   ggtitle("Fishing catch") +
   theme_minimal() +
   theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))
 
-intensitydf %>% filter(Industry=="Shipping_distance") %>%
+intensitydf_new %>% filter(Industry=="Shipping_distance") %>%
   ggplot(aes(x=Region, y=intensity)) +
   geom_col() +
   ggtitle("Shipping distance") +
