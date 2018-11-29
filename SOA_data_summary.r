@@ -12,8 +12,8 @@ setwd(wd)
 #setup
 ###################
 
-metrics <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Shipping_volume", "Hunters", "Fishing", "Oilandgas_wells")
-metrics <- c("Oilandgas_wells")
+metrics <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells")
+#metrics <- c("Oilandgas_wells")
 
 #expressed as annual growth rate over start years value. 
 #annual growth rate = (final/start)^(1/nyrs) -1
@@ -41,6 +41,7 @@ growthfun <- function(data, ys, yf) {
 ###################
 
 for(currm in metrics) {
+  print(currm)
   #load file
   dat <- read.csv(paste0(currm, "_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM")
   #drop rows with NAs
