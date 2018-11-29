@@ -21,7 +21,9 @@ require(ggpubr) #for ggarrange
 wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 
 #Industries
-industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells", "Mining", "Reindeer")
+industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells", "Mining", "Reindeer") # we analyse "Shipping_trafficwork" separately
+
+alldat <- read.csv(paste0(dirname(wd), "/Model/All_industries_long.csv"))
 
 #a function to change the plot sizes
 subchunkify <- function(g, fig_height=7, fig_width=5) {
@@ -42,80 +44,6 @@ subchunkify <- function(g, fig_height=7, fig_width=5) {
 
 ```
 
-```{r merge data, include=FALSE}
-#load and merge files
-alldat <- lapply(industries, function(i) {
-  print(paste0("loading ", i))
-    
-    dat <- read.csv(paste0(wd, "/", i, "_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
-    dat$value_raw <- dat$value
-    dat$subIndustry <- i
-   
-    if(i %in% c("Cruise_tourism", "Domestic_tourism", "International_tourism")){
-        dat$Industry <- "Tourism"
-    } else {
-        dat$Industry <- i
-    }
-    
-      if(i == "Shipping_distance"){ 
-        dat <- dat %>% filter(Country!="Total") %>% 
-                  group_by(Country, Region, Industry, subIndustry, year) %>% 
-                  summarise(value=sum(value, na.rm=TRUE)) %>% #sum shipping distance across all types of shipping
-                  mutate(Metric="nautical miles sailed all shipcats") %>% 
-                  mutate(value_raw=value)
-        dat$value[dat$value==0] <- 1 #add small constant to make growth rate calculation possible
-        
-      } 
-
-      if(i == "Fishing"){ 
-        dat <- dat %>% filter(Region!="Total") 
-      } 
-      
-
-      if(i == "Cruise_tourism"){ 
-      #Murmansk cruise tourism statistics use a different metric than elsewhere, number of ship calls as opposed to passengers.
-      #We convert ship calls to an estimation of passenger numbers by multiplying the number of calls by the average vessel capacity of ships calling in 2016 (437.4 passengers).
-      #adjust murmansk
-      dat$value[dat$Region=="Murmansk"] <-  dat$value[dat$Region=="Murmansk"]*437.4
-      dat[dat$Region=="Murmansk", "Metric"] <- "Passengers"
-      #drop other metrics
-      dat <- dat %>% filter(Metric=="Passengers")
-      } 
-      
-      if(i == "Hunters") { 
-        #drop other types of hunting
-        dat <- dat %>% filter(Metric %in% c("All hunting/trapping/fishing licenses", "Number of hunters who paid game management fees", "Registered hunters", "Paid hunting permits", "Sports hunters"))
-        #drop extra column
-        dat <- dat[, which(!names(dat)=="Region_original")]
-      }
-      
-      if(i == "Oilandgas_wells") {
-        #remove duplicated data: drop Region="all" - this is a sum of onshore and offshore; and purpose="all" - this is sum of exploration & development
-        dat <- dat %>% filter(Region!="All" & Purpose!="All"|is.na(Purpose) & Metric!="All") %>% #have to explicitly select NAs to get Alaska etc
-              group_by(Country, Region, Metric, year) %>% #the metric column tells us whether exploration or dev
-              summarise(value_raw=sum(value_raw, na.rm=TRUE)) %>% #sum the different types of wells (injection, wildcat etc)
-              mutate(subIndustry=paste("Oilandgas", Metric, sep="_")) #split Industry into exploration and development      
-              dat$Metric <- "n_wells"
-              dat$Industry <- "OilandGas"
-
-        #change value to cumsum
-        dat <- dat %>% group_by(Country,Region,subIndustry) %>% 
-                arrange(year) %>%
-                mutate(value=cumsum(value_raw)) %>% #cumulative sum of n wells
-                mutate(value=replace(value, value==0, NA)) #replace zeros with NA
-      }
-      
-    return(data.frame(dat))
-
-})
-alldat <- bind_rows(alldat)
-#alldat$value[alldat$value==0] <- NA #replace zeros with NA, otherwise anngrowthfun returns Inf
-alldat$Country[alldat$Country %in% c("Svalbard & Jan Mayen", "Svalbard and Jan Mayen")] <- "Svalbard"
-alldat <- alldat %>% mutate_at(c("Country", "Region", "Industry", "subIndustry"), funs(factor)) %>% #convert to factors
-                    filter(!is.na(value)) #drop NAs
-write_excel_csv(alldat, paste0(dirname(wd), "/Model/All_industries_long.csv")) #for fileEncoding = "UTF-8-BOM"
-
-```
 
 ### Data processing:
 #### Shipping distance: 
@@ -240,11 +168,11 @@ itsadugsummary <- function(m1){
 
 
 #set up function to plot the model outputs
-acfplotfun <- function(currmod){
+acfplotfun <- function(currmod, lagn){
   #plot the model autocorrelation and acf plot
   par(mfrow=c(1,2))
-  acf(resid(currmod$lme, type="normalized"), lag=20, main="ACF")
-  pacf(resid(currmod$lme, type="normalized"), lag=20, main="PACF")
+  acf(resid(currmod$lme, type="normalized"), lag=lagn, main="ACF")
+  pacf(resid(currmod$lme, type="normalized"), lag=lagn, main="PACF")
 }
 
 comparemodelsplot <- function(m1, m2){
@@ -292,7 +220,7 @@ plotmodelbyregion <- function(m1){
  preds2 <- bind_cols(currdf, preds)
   
   preds2 %>% ggplot(aes(x=year, y=znorm)) +
-    geom_point(col="darkslategray2") +
+    geom_point(col="black") +
     geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
     geom_line(aes(y=fit), col="black", lwd=0.7) +
     facet_wrap(~Region) +
@@ -326,18 +254,25 @@ currdf <- znormdat %>% filter(subIndustry==i) %>% droplevels()
 mod1 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation=NULL, data=currdf)
 #Add in temporal autocorrelation with 1yr lag
 mod2 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+mod3 <- gamm(znorm ~ s(year), random=list(Region=~1), correlation = corAR1(value=0.2, fixed=TRUE, form = ~ year), data=currdf)
+
+summary(mod1$gam)
+summary(mod1$lme)
+anova(mod1$gam)
+par(mfrow=c(2,2))
+gam.check(mod1$gam)
 ```
 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
 ```{r models_gamm_autocorr_1, include=TRUE, warning=TRUE}
-acfplotfun(mod1) #examine the autocorrelation
+acfplotfun(mod1, lagn=10) #examine the autocorrelation
 # https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
 ## if it seems like ACF drops off slowly - ARMA terms probably best
-print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
-acfplotfun(mod2) #any correlation remaining?
+print(Box.test(resid(mod1$lme), lag=10, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+acfplotfun(mod2, lagn=10) #any correlation remaining?
 #compare mod1 and mod2
 comparemodelsplot(mod2$gam, mod1$gam)
 
@@ -347,17 +282,19 @@ comparemodelsplot(mod2$gam, mod1$gam)
 Gamm model of z-normalised value ~ smoothed year with Region as a random effect. Fitted thin-plate spline with AR(1) residuals and approximate 95% point-wise confidence interval.
 
 ```{r models_gamm_summary_1, include=TRUE, warning=TRUE}
-
-print(summary(mod2$lme))
-print(summary(mod2$gam))
-print(anova(mod2$gam) )
-print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+sink(paste0(dirname(wd), "/Model/Cruise_tourism_mod1_summarystats.txt"))
+print(summary(mod1$lme))
+print(summary(mod1$gam))
+print(anova(mod1$gam) )
+print(anova(mod1$lme, mod3$lme)) #any difference in the random effects?
+print(gam.check(mod1$gam))
+sink()
 
 par(mfrow=c(1,2))
-plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
-plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
-plotmodel(mod2$gam)
-plotmodelbyregion(mod2$gam)
+plot(mod1$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
+plot(mod1$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
+plotmodel(mod1$gam)
+plotmodelbyregion(mod1$gam)
 
 ```
 
@@ -559,21 +496,23 @@ plotmodelbyregion(mod2$gam)
 ```
 
 ### Shipping trafficwork
+
 ```{r models_gamm_setup_5b, include=FALSE, warning=TRUE}
 
 currdf <- read.csv(paste0(wd, "/Shipping_trafficwork_long.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE)
+i <- "Shipping_trafficwork"
 #znorm
 currdf$value_raw <- currdf$value
-currdf <- currdf %>%  filter(!is.na(value)) %>% #drop years missing data
-  group_by(Region, year) %>% 
+currdf <- currdf %>%  filter(value!=0) %>% #drop years missing data
+  group_by(Region, ShipCat, year) %>% 
   summarise(value = sum(value))
 currdf <- currdf %>%
   mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
   
 #Basic model, ignoring temporal autocorrelation
-mod1 <- gamm(znorm ~ year, random=list(Region=~1), correlation=NULL, data=currdf)
+mod1 <- gamm(znorm ~ year + ShipCat, random=list(Region=~1), correlation=NULL, data=currdf)
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ year, random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)   
+mod2 <- gamm(znorm ~ year + ShipCat, random=list(Region=~1), correlation = corAR1(form = ~ year | ShipCat), data=currdf)   
 ```
 #### Model summary
 
@@ -587,7 +526,7 @@ print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
 par(mfrow=c(1,2))
 #plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
 #plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
-plotmodel(mod2$gam)
+plotmodel(mod2$gam) + facet_wrap(~ShipCat)
 plotmodelbyregion(mod2$gam)
 
 ```
