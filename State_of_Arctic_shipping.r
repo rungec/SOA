@@ -17,7 +17,7 @@ require(scales) #for scale_x_datetime
 wd <- "D:/Box Sync/Arctic/Data/Transport and accessibility/Shipping/Havbase_arktis"
 setwd(wd)
 
-filelist <- list.files(paste0(wd, "/raw"), pattern="DistanceSailedExport*", full.names=TRUE)
+filelist <- list.files(paste0(wd, "/raw/LME"), pattern="DistanceSailedExport*", full.names=TRUE)
 shipdatL <- lapply(filelist, function (i){
   currsheet <- read_excel(i, skip = 2, col_types = "text")
   currsheet[, 3:10] <- do.call(cbind, lapply(currsheet[, 3:10], function(x) {
@@ -29,37 +29,43 @@ shipdatL <- lapply(filelist, function (i){
 })
 shipdatdf <- do.call(rbind, shipdatL)
 
+
 #fix the date column
 shipdatdf$Date <- as.POSIXct(paste(shipdatdf$Periode,"-01",sep=""))
 shipdatdf$Year <- year(shipdatdf$Date)
 shipdatdf$Month <- month(shipdatdf$Date)
 
 #categorise the ship types
-shipdatdf$ShipCat <- c("Other")
-shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Oljetankere", "Kjemikalie-/produkttankere", "Gasstankere") ] <- c("Oil or gas tanker")
-shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Bulkskip", "Stykkgodsskip", "Konteinerskip", "Ro Ro last", "Kjøle-/fryseskip") ] <- c("Goods transport")
-shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Fiskefartøy") ] <- c("Fishing")
-shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Passasjer") ] <- c("Passenger")
+# shipdatdf$ShipCat <- c("Other")
+# shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Oljetankere", "Kjemikalie-/produkttankere", "Gasstankere") ] <- c("Oil or gas tanker")
+# shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Bulkskip", "Stykkgodsskip", "Konteinerskip", "Ro Ro last", "Kjøle-/fryseskip") ] <- c("Goods transport")
+# shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Fiskefartøy") ] <- c("Fishing")
+# shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Passasjer") ] <- c("Passenger")
+#categorise the ship types
+shipdatdf$ShipCat <- c("Other") #"Offshore supply ships", "Other service offshore vessels", "Other activities"
+shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Chemical tankers", "Gas tankers") ] <- c("Oil or gas tanker")
+shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Bulk carriers", "General cargo ships", "Container ships", "Ro-Ro cargo ships", "Refrigerated cargo ships") ] <- c("Goods transport")
+shipdatdf$ShipCat[shipdatdf$Skipstype %in% c("Fishing vessels") ] <- c("Fishing")
 
-write.csv(shipdatdf, "intermediate/DistancesSailed_alldata.csv", row.names=FALSE) 
+write.csv(shipdatdf, "intermediate/DistancesSailed_alldata_LME.csv", row.names=FALSE) 
 
 #Summarise and export
 t0 <- shipdatdf %>% group_by(region, ShipCat, Year) %>% 
       summarise(dist_sailed=sum(`Total distanse`)) %>% 
       spread(Year, dist_sailed) %>% data.frame()
-write.csv(t0, "intermediate/DistancesSailed_byregion_shipcat_year.csv", row.names=FALSE)
+write.csv(t0, "intermediate/DistancesSailed_byregion_shipcat_year_LME.csv", row.names=FALSE)
 
 #Summarise and export
 t02 <- shipdatdf %>% group_by(region, Year) %>% 
       summarise(dist_sailed=sum(`Total distanse`)) %>% 
       spread(Year, dist_sailed) %>% data.frame()
-write.csv(t02, "intermediate/DistancesSailed_byregion_year.csv", row.names=FALSE)
+write.csv(t02, "intermediate/DistancesSailed_byregion_year_LME.csv", row.names=FALSE)
 
 #Summarise and export shiptraffic
 weight_lookup <- data.frame(shipweight=c("<1000 GT", ">=100000 GT", "1000-4999 GT", "10000-24999 GT", "25000-49999 GT", "5000-9999 GT", "50000-99999 GT"), 
                             shipweight_mid=c(1000, 100000, 3000, 17500, 37500, 7500, 75000), stringsAsFactors=FALSE)
-country_lookup <- data.frame(region=c("AlaskanEEZ", "CanadianEEZ", "FaroesEEZ", "GreenlandEEZ", "IcelandEEZ", "JanMayenEEZ", "NorwayEEZ", "OpenArctic", "OpenBarentsSea", "OpenDavisStrait", "OpenNorthAtlantic", "OpenNorwegianSea", "RussianEEZ", "SvalbardFisheriesZone", "UKEEZ"),
-                             Country=c("USA", "Canada", "Faroe Islands", "Greenland", "Iceland", "Svalbard & Jan Mayen", "Norway", "High Seas", "High Seas", "High Seas", "High Seas", "High Seas", "Russia", "Svalbard & Jan Mayen", "UK"))
+#country_lookup <- data.frame(region=c("AlaskanEEZ", "CanadianEEZ", "FaroesEEZ", "GreenlandEEZ", "IcelandEEZ", "JanMayenEEZ", "NorwayEEZ", "OpenArctic", "OpenBarentsSea", "OpenDavisStrait", "OpenNorthAtlantic", "OpenNorwegianSea", "RussianEEZ", "SvalbardFisheriesZone", "UKEEZ"),
+#                            Country=c("USA", "Canada", "Faroe Islands", "Greenland", "Iceland", "Svalbard & Jan Mayen", "Norway", "High Seas", "High Seas", "High Seas", "High Seas", "High Seas", "Russia", "Svalbard & Jan Mayen", "UK"))
 
 shipweightdf <- shipdatdf %>% gather(shipweight, dist_sailed, "<1000 GT":">=100000 GT") 
 tsw <- shipweightdf %>% group_by(region, ShipCat, shipweight, Year) %>% 
@@ -67,10 +73,10 @@ tsw <- shipweightdf %>% group_by(region, ShipCat, shipweight, Year) %>%
                 filter(region!="Total")
 #tsw <- shipweightdf %>% filter(ShipCat=="Goods transport") %>% group_by(shipweight, Year) %>% summarise(dist_sailed=sum(dist_sailed))
 tsw <- tsw %>% left_join(weight_lookup, by="shipweight") %>% #add shipweight as number (midpoint)
-               left_join(country_lookup, by="region") %>% #add country
+               #left_join(country_lookup, by="region") %>% #add country
                mutate(traffic_work_gTnm = shipweight_mid*dist_sailed) #calculate traffic work
 
-write.csv(tsw, "ArcticShipping_byregion_vesselweight_year.csv", row.names=FALSE)
+write.csv(tsw, "intermediate/ArcticShipping_byregion_vesselweight_year_LME.csv", row.names=FALSE)
 
 
 #########################
