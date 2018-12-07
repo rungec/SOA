@@ -175,6 +175,12 @@ acfplotfun <- function(currmod, lagn){
   pacf(resid(currmod$lme, type="normalized"), lag=lagn, main="PACF")
 }
 
+residplot <- function(m1){
+  b <- currdf %>% add_residuals(m1)
+  b %>% ggplot(aes(year, resid)) +
+    geom_point() 
+}
+
 comparemodelsplot <- function(m1, m2){
     #set up predictions  
     grid <- currdf %>% 
@@ -203,9 +209,9 @@ comparemodelsplot <- function(m1, m2){
 }
   
 plotmodel <- function(m1){
-  preds <- predict(m1, newdata=currdf, se=TRUE)
-   preds2 <- bind_cols(currdf, preds)
-  preds2 %>%  
+ preds <- predict(m1, newdata=currdf, se=TRUE)
+ preds2 <- bind_cols(currdf, preds)
+  preds %>%  
    ggplot(aes(x=year, y=znorm)) +
     geom_point(aes(col=Region)) +
     geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
@@ -272,6 +278,8 @@ acfplotfun(mod1, lagn=10) #examine the autocorrelation
 ## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
 ## if it seems like ACF drops off slowly - ARMA terms probably best
 print(Box.test(resid(mod1$lme), lag=10, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+print(Box.test(resid(mod2$lme), lag=10, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
+print(Box.test(resid(mod3$lme), lag=10, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
 acfplotfun(mod2, lagn=10) #any correlation remaining?
 #compare mod1 and mod2
 comparemodelsplot(mod2$gam, mod1$gam)
@@ -457,23 +465,17 @@ i <- unique(znormdat$subIndustry)[5]
 
 currdf <- znormdat %>% filter(subIndustry==i & year<2018) %>% droplevels()
 #Basic model, ignoring temporal autocorrelation
-mod1 <- gamm(znorm ~ year, random=list(Region=~1), correlation=NULL, data=currdf)
-#Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ year, random=list(Region=~1), correlation = corAR1(form = ~ year), data=currdf)
+mod1 <- lme(znorm ~ year, random=~1|Region, data=currdf)
+#There is temporal autocorrelation, because we have low df so have to model a straight line, though looking at the data the trend is for an increase to 2014 then stabilising since then
 ```
 
 #### Autocorrelation check
 We first check for autocorrelation, then run compare models with and without AR(1) residuals.
 
 ```{r models_gamm_autocorr_5, include=TRUE, warning=TRUE}
-acfplotfun(mod1) #examine the autocorrelation
-# https://www.analyticsvidhya.com/blog/2015/12/complete-tutorial-time-series-modeling/ for a good discussion of how to interpret these plots, and whether there is AR or MA correlation
-## if it seems like like sharp cut-off in ACF and PACF - AR terms probably best
-## if it seems like ACF drops off slowly - ARMA terms probably best
-print(Box.test(resid(mod1$lme), lag=20, type="Ljung-Box")) #do we have any significant temporal autocorrelation?
-acfplotfun(mod2) #any correlation remaining?
-#compare mod1 and mod2
-comparemodelsplot(mod2$gam, mod1$gam)
+
+residplot(mod1) #do we have any significant temporal autocorrelation?
+
 
 ```
 
@@ -482,16 +484,34 @@ Gamm model of z-normalised value ~ smoothed year with Region as a random effect.
 
 ```{r models_gamm_summary_5, include=TRUE, warning=TRUE}
 
-print(summary(mod2$lme))
-print(summary(mod2$gam))
-print(anova(mod2$gam) )
-print(anova(mod2$lme, mod1$lme)) #any difference in the random effects?
+print(summary(mod1))
+print(anova(mod1) )
 
 par(mfrow=c(1,2))
 #plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i)
 #plot(mod2$gam, residuals = TRUE, pch = 19, cex = 0.75, shade = TRUE, rug = FALSE, main=i, seWithMean = TRUE)
-plotmodel(mod2$gam)
-plotmodelbyregion(mod2$gam)
+currdf %>% add_predictions(m1) %>%  
+   ggplot(aes(x=year, y=znorm)) +
+    geom_point(aes(col=Region)) +
+    #geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=pred), col="black") +
+    #facet_wrap(~Region) +
+    #theme(legend.position="none") +
+    theme_minimal()
+
+currdf %>% add_predictions(m1) %>%  
+   ggplot(aes(x=year, y=znorm)) +
+    geom_point(col="black") +
+    #geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=pred), col="black") +
+    facet_wrap(~Region) +
+    theme_light() +
+    theme(legend.position="none", panel.grid=element_blank(), strip.text = element_text(colour = "black"))
+
+#which regions experienced the biggest change?
+a <- currdf %>% select(subIndustry, Region, year, value) %>% 
+      spread(year, value) %>%
+      mutate(change_nm = `2017`-`2012`)
 
 ```
 
