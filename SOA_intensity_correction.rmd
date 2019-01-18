@@ -14,11 +14,12 @@ wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/"
 ### Intensity of activities
 We calculate the intensity of each industry using the mean value across 2012-2017.  
 we use a spread of years rather than a single year to account for interannual variation and missing data.
+As tourism is increasing, we use the 2016 values
 
 ```{r intensities, include=FALSE} 
 alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
-intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas", "Mining")) %>% #drop years missing data
+intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas", "Mining", "Tourism")) %>% #drop years missing data
   filter(year %in% 2012:2017) %>% 
   group_by(Country, Region, Industry, subIndustry, Metric)  %>%
   summarise(intensity=mean(value)) 
@@ -41,9 +42,14 @@ miningintensity <- miningintensity %>%
            subIndustry="Mining", 
            Metric="Operational_mines")
 
+tourismintensity <- alldat %>%  filter(!is.na(value) & Industry %in% c("Tourism")) %>% #drop years missing data
+  filter(year==2016) %>% 
+  group_by(Country, Region, Industry, subIndustry, Metric)  %>%
+  summarise(intensity=value) 
+
 
 #replace oil and gas values with these new values
-intensitydf <- bind_rows(intensitydf, oilintensity, miningintensity)
+intensitydf <- bind_rows(intensitydf, oilintensity, miningintensity, tourismintensity)
 intensitydf <- intensitydf %>% drop_na() %>% droplevels()
 write_excel_csv(intensitydf, paste0(wd, "All_industries_intensity.csv")) #for fileEncoding = "UTF-8-BOM"
 
@@ -76,7 +82,7 @@ area_tourism <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_
   area_tourism[area_tourism$Region=="Northern Ostrobothnia", "Region"] <- "North Ostrobothnia"
   area_tourism[area_tourism$Region=="Svalbard & Jan Mayen", "Region"] <- "Svalbard and Jan Mayen"
   area_tourism <- area_tourism %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
-area_cruise <- read.csv("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/Arctic_coastlines.csv", header=TRUE)
+area_cruise <- read.csv("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/Arctic_coastlines.csv", header=TRUE, stringsAsFactors = FALSE)
 area_popn <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_popn2.shp")
   st_geometry(area_popn) <- NULL
   area_popn <- area_popn %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
