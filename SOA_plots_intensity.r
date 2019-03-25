@@ -24,6 +24,9 @@ amap <- read_sf(dsn=datawd, layer="AMAP_updatedRussia_clipto60N_SOA")
 
 #metrics <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Shipping_volume", "Hunters", "Fishing", "Oilandgas_wells")
 
+#read in table
+tbl <- read.csv(paste0(wd, "/Analysis/Output/All_industries_intensity_perkm.csv"))
+tbl <- tbl %>% select(-one_of("Country.x", "Country.y"))
 
 #############
 #Set up functions ----
@@ -112,7 +115,8 @@ plotfunIntensity <- function(map_data, mapped_col, pretty_breaks, mycols, ndecim
              title = titletext,
              subtitle = subtext, ...)+
         coord_sf(crs = st_crs(map_data), datum = NA, expand=FALSE) + #drop graticules
-        theme(panel.grid=element_blank(), legend.position="bottom", 
+        theme(title=element_text(size=18), legend.text=element_text(size=14), legend.title=element_text(16),
+              panel.grid=element_blank(), legend.position="bottom", 
               panel.background = element_rect(fill="grey90"), 
               plot.background = element_rect(fill = "grey90", color="grey90"),
               legend.background = element_rect(fill="grey90"),
@@ -132,6 +136,7 @@ plotfunIntensity <- function(map_data, mapped_col, pretty_breaks, mycols, ndecim
                             reverse = T, label.position = "bottom"))
   #save plot
   outname <- paste(titletext, subtext, sep="_")
+  outname <- gsub("\\.", "", outname)
   outname <- paste0("Figures/", gsub(" ", "_", outname), ".png")
   png(outname, height=6, width=4.41, units="in", res=300)
   print(p)
@@ -146,11 +151,39 @@ plotfunIntensity <- function(map_data, mapped_col, pretty_breaks, mycols, ndecim
 ###########################
 #MAIN PROCESSING ----
 ###########################
-#read in table
-tbl <- read.csv(paste0(wd, "/Analysis/Model/All_industries_intensity_perkm.csv"))
+#####################
+#Combined TOURISM
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_tourism3")
 
+  #manipulate table
+  tbl_ed <- tbl %>% filter(subIndustry %in% c("International_tourism", "Domestic_tourism")) %>% 
+                             select(Region, intensity, adj_intensity, Area_km) %>%
+                             group_by(Region) %>%
+                             summarize(Area_km=mean(Area_km),
+                                       intensity_thou=sum(intensity)/1000,
+                                       adj_intensity=sum(adj_intensity))
+    #merge table to sf
+  tourist_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
+
+  #plot Density
+  plotfunIntensity(map_data=tourist_data, 
+                   mapped_col="adj_intensity",
+                   mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
+                   pretty_breaks=c(5, 30, 50, 100), ndecimals=0, 
+                   legendtitle=expression(Tourists~per~km^{2}), 
+                   titletext="A. Tourism", subtext="")
+                   #titletext="Arctic tourism", subtext="Density", caption="Canada, Alaska, Russia = number of visitors; \nAll other countries = guest nights")
+  
+  #plot Intensity
+  plotfunIntensity(map_data=tourist_data, 
+                   mapped_col="intensity_thou",
+                   mycols = rev(viridisLite::magma(8)[2:7]),
+                   pretty_breaks=c(30, 100, 300, 1000, 3000), ndecimals=0, 
+                   legendtitle="Tourists, thousands", 
+                   titletext="Arctic tourism", subtext="Intensity", caption="Canada, Alaska, Russia = number of visitors; \nAll other countries = guest nights")
+  
+  
 #####################
 #CRUISE TOURISM ----
 #manipulate table
@@ -224,39 +257,12 @@ tbl_ed <- tbl %>% filter(subIndustry=="Domestic_tourism") %>% select(Region, int
                    titletext="Arctic international tourism", subtext="Density", caption="Canada, Alaska, Russia = number of visitors; \nAll other countries = guest nights")
   
   
-#####################
-#Combined TOURISM
-  #manipulate table
-  tbl_ed <- tbl %>% filter(subIndustry %in% c("International_tourism", "Domestic_tourism")) %>% 
-                             select(Region, intensity, adj_intensity, Area_km) %>%
-                             group_by(Region) %>%
-                             summarize(Area_km=mean(Area_km),
-                                       intensity_thou=sum(intensity)/1000,
-                                       adj_intensity=sum(adj_intensity))
-    #merge table to sf
-  tourist_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
 
-  #plot
-  plotfunIntensity(map_data=tourist_data, 
-                   mapped_col="intensity_thou",
-                   mycols = rev(viridisLite::magma(8)[2:7]),
-                   pretty_breaks=c(30, 100, 300, 1000, 3000), ndecimals=0, 
-                   legendtitle="Tourists, thousands", 
-                   titletext="Arctic tourism", subtext="Intensity", caption="Canada, Alaska, Russia = number of visitors; \nAll other countries = guest nights")
-  
-  #plot
-  plotfunIntensity(map_data=tourist_data, 
-                   mapped_col="adj_intensity",
-                   mycols = rev(viridisLite::magma(8)[2:7]),
-                   pretty_breaks=c(5, 30, 50, 100), ndecimals=0, 
-                   legendtitle=expression(Tourists/km^{2}), 
-                   titletext="Arctic tourism", subtext="Density", caption="Canada, Alaska, Russia = number of visitors; \nAll other countries = guest nights")
-  
   
 #####################
 #OIL AND GAS All----
 #read in template
-template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas1")
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas3")
   #manipulate table
   tbl_ed <- tbl %>% filter(Industry =="OilandGas") %>% 
     select(Region, intensity, adj_intensity, Area_km) %>% #both development and exploration wells
@@ -264,10 +270,22 @@ template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas1")
     summarize(Area_km=mean(Area_km),
               intensity=sum(intensity),
               adj_intensity=sum(adj_intensity)) 
+
+  
 #merge table to sf
 wells_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
 
-#plot
+#plot Density
+plotfunIntensity(map_data=wells_data, 
+                 mapped_col="adj_intensity", 
+                 mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
+                 pretty_breaks=c(5, 10, 30), ndecimals=1, 
+                 pretty_breaks=c(5, 10, 30, 65), ndecimals=1, 
+                 legendtitle=expression(paste(Wells~per~{10}, ",000", ~km^{2})), 
+                 titletext="C. Oil and gas", subtext="")
+                 #titletext="Arctic oil and gas", subtext="Density", caption="Any development or exploration wells drilled after 1960")
+
+#plot Intensity
 plotfunIntensity(map_data=wells_data, 
                  mapped_col="intensity", 
                  mycols = rev(viridisLite::magma(8)[2:8]),
@@ -275,12 +293,6 @@ plotfunIntensity(map_data=wells_data,
                  legendtitle="Number of wells drilled", 
                  titletext="Arctic oil and gas", subtext="Intensity", caption="Any development or exploration wells drilled after 1960")
 
-plotfunIntensity(map_data=wells_data, 
-                 mapped_col="adj_intensity", 
-                 mycols = rev(viridisLite::magma(8)[2:7]),
-                 pretty_breaks=c(0.5, 1, 3), ndecimals=1, 
-                 legendtitle=expression(Wells~per~{1000}~km^{2}), 
-                 titletext="Arctic oil and gas", subtext="Density", caption="Any development or exploration wells drilled after 1960")
 
 
 ########################
@@ -301,7 +313,7 @@ plotfunIntensity(map_data=wells_data,
                  mapped_col="adj_intensity", 
                  mycols = rev(viridisLite::magma(8)[2:7]),
                  pretty_breaks=c(0.25, 0.5, 1), ndecimals=1, 
-                 legendtitle=expression(Wells~per~{1000}~km^{2}), 
+                 legendtitle=expression(Wells~per~{10000}~km^{2}), 
                  titletext="Arctic oil and gas", subtext="Exploration density", caption="Exploration wells drilled after 1960")
 
 
@@ -322,7 +334,7 @@ plotfunIntensity(map_data=wells_data,
                  mapped_col="adj_intensity", 
                  mycols = rev(viridisLite::magma(8)[2:7]),
                 pretty_breaks=c(0.5, 1, 2, 3), ndecimals=1, 
-                 legendtitle=expression(Wells~per~{1000}~km^{2}), 
+                 legendtitle=expression(Wells~per~{10000}~km^{2}), 
                  titletext="Arctic oil and gas", subtext="Development density", caption="Development wells drilled after 1960")
 
 #####################
@@ -332,7 +344,18 @@ template <- read_sf(dsn=datawd, layer="SOA_borders_for_popn2")
 tbl_ed <- tbl %>% filter(subIndustry =="Mining")
 #merge table to sf
 mine_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
+mine_data$adj_intensity <- mine_data$adj_intensity
 
+#Plot density
+plotfunIntensity(map_data=mine_data, 
+                 mapped_col="adj_intensity", 
+                 mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
+                 pretty_breaks=c(0.5, 1, 1.5, 2), ndecimals=1, 
+                 legendtitle=expression(paste(Mines~per~{10}, ",000",~km^{2})), 
+                 titletext="B. Mining", subtext="")
+                 #titletext="Arctic mining", subtext="Density", caption="Any mines operating after 1960")
+
+#plot intensity
 plotfunIntensity(map_data=mine_data, 
                  mapped_col="intensity", 
                  mycols = rev(viridisLite::magma(8)[2:7]),
@@ -340,25 +363,33 @@ plotfunIntensity(map_data=mine_data,
                  legendtitle="Number of mines", 
                  titletext="Arctic mining", subtext="Intensity", caption="Any mines operating after 1960")
 
-plotfunIntensity(map_data=mine_data, 
-                 mapped_col="adj_intensity", 
-                 mycols = rev(viridisLite::magma(8)[2:7]),
-                 pretty_breaks=c(0.05, 0.10, 0.15, 0.20), ndecimals=2, 
-                 legendtitle=expression(Mines~per~{1000}~km^{2}), 
-                 titletext="Arctic mining", subtext="Density", caption="Any mines operating after 1960")
+
 
 #####################
 #FISHING ----
 #read in template
 template <- read_sf(dsn=datawd, layer="SOA_borders_for_fishing")
+nodata <- read_sf(dsn=datawd, layer="SOA_borders_for_NODATA_fishing")
 
 tbl_ed <- tbl %>% filter(Industry =="Fishing")
 
+
 #merge table to sf
-fishing_data <- merge(template, tbl, by=c("Region"), all.x=TRUE)
+fishing_data <- merge(template, tbl_ed, by=c("Region"), all=TRUE)
+#add a row for the central arctic
+#fishing_data[fishing_data$Region=="Central Arctic", c("intensity", "adj_intensity")] <- NA 
 fishing_data$intensity_thou <- fishing_data$intensity/1000
 
-#plot
+#plot density
+plotfunIntensity(map_data=fishing_data, 
+                 mapped_col="adj_intensity", 
+                 mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
+                 pretty_breaks=c(0.2, 0.5, 1, 2), ndecimals=1, 
+                 legendtitle=expression(Tonnes~catch~per~km^{2}), 
+                 titletext="D. Fisheries", subtext="")
+                 #titletext="Arctic fishing catch", subtext="Density")
+
+#plot intensity
 plotfunIntensity(map_data=fishing_data, 
                  mapped_col="intensity_thou", 
                  mycols = rev(viridisLite::magma(8)[2:8]),
@@ -366,37 +397,35 @@ plotfunIntensity(map_data=fishing_data,
                  legendtitle="Annual catch, thousand tonnes", 
                  titletext="Arctic fishing catch", subtext="Intensity")
 
-plotfunIntensity(map_data=fishing_data, 
-                 mapped_col="adj_intensity", 
-                 mycols = rev(viridisLite::magma(8)[2:8]),
-                 pretty_breaks=c(0.2, 0.5, 1, 2), ndecimals=1, 
-                 legendtitle=expression(Tonnes~catch~per~km^{2}), 
-                 titletext="Arctic fishing catch", subtext="Density")
 
 
 #####################
 #SHIPPING - ALL ----
 #read in template
 template <- read_sf(dsn=datawd, layer="EEZ_plus_highseas_noland")
+nodata <- read_sf(dsn=datawd, layer="SOA_borders_for_NODATA_shipping")
+
 #manipulate table
-tbl_ed <- tbl_ed <- tbl %>% filter(Industry =="Shipping_distance")
+tbl_ed <- tbl %>% filter(Industry =="Shipping_distance") %>% droplevels()
 #merge table to sf
 shipping_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
 shipping_data$intensity_thou <- shipping_data$intensity/100000
 
-#plot
+#plot density
+plotfunIntensity(map_data=shipping_data, 
+                 mapped_col="adj_intensity", 
+                 mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
+                 pretty_breaks=c(1, 2, 4, 6), ndecimals=0, 
+                 legendtitle=expression(Annual~nm~sailed~per~km^{2}), 
+                 titletext="E. Shipping", subtext="")
+                 #titletext="Arctic shipping distance", subtext="Density")
+
+#plot intensity
 plotfunIntensity(map_data=shipping_data, 
                  mapped_col="intensity_thou", 
                  mycols = rev(viridisLite::magma(8)[2:8]),
                  pretty_breaks=c(3, 10, 25, 50, 150), ndecimals=0, 
                  legendtitle=expression(Annual~distance~sailed~(x~10^{5}~nm)), 
                  titletext="Arctic shipping distance", subtext="Intensity")
-
-plotfunIntensity(map_data=shipping_data, 
-                 mapped_col="adj_intensity", 
-                 mycols = rev(viridisLite::magma(8)[2:8]),
-                 pretty_breaks=c(1, 2.5, 10, 25, 50), ndecimals=2, 
-                 legendtitle=expression(Annual~density~(nm~sailed~per~km^{2})), 
-                 titletext="Arctic shipping distance", subtext="Density")
 
 
