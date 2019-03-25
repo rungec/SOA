@@ -8,7 +8,7 @@ output: html_document
 
 require(sf)
 require(tidyverse)
-wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/"
+wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Output/"
 ```
 
 ### Intensity of activities
@@ -17,7 +17,7 @@ we use a spread of years rather than a single year to account for interannual va
 As tourism is increasing, we use the 2016 values
 
 ```{r intensities, include=FALSE} 
-alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Model/All_industries_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
+alldat <- read.csv("D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Output/All_industries_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
 
 intensitydf <- alldat %>%  filter(!is.na(value) & !Industry %in% c("OilandGas", "Mining", "Tourism")) %>% #drop years missing data
   filter(year %in% 2012:2017) %>% 
@@ -103,6 +103,9 @@ area_mining <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_o
 area_mining2 <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining2.shp") 
   st_geometry(area_mining2) <- NULL
   area_mining2 <- area_mining2 %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+area_oilandgas <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_oilandgas3.shp") 
+  st_geometry(area_oilandgas) <- NULL
+  area_oilandgas <- area_oilandgas %>% group_by(Region) %>% summarise(Area_km = sum(SUM_Area_k))
 
 intensitydf <- read.csv(paste0(wd, "All_industries_intensity.csv"), header=TRUE, fileEncoding = "UTF-8-BOM", stringsAsFactors = FALSE) #for fileEncoding = "UTF-8-BOM"
 ```
@@ -121,22 +124,17 @@ popn <- intensitydf %>% filter(Industry=="Population") %>%
 #Mining
 mining <- intensitydf %>% filter(Industry=="Mining") %>%
       left_join(area_mining2, by="Region") %>% 
-      mutate(adj_intensity = 1000*intensity/Area_km)
+      mutate(adj_intensity = 10000*intensity/Area_km)
 
 #Oil and gas
 oilandgas <- intensitydf %>% filter(Industry=="OilandGas") %>%
-      mutate(Region=replace(Region, Region=="Chukchi Sea", "Northern Bering - Chukchi Seas")) %>%
-      mutate(Region=replace(Region, Country=="Greenland" & Region=="Offshore", "Greenland Sea")) %>%
+      mutate(Region=replace(Region, Country=="Greenland" & Region=="Offshore", "Greenland offshore")) %>%
       mutate(Region=replace(Region, Country=="Greenland" & Region=="Onshore", "Greenland")) %>%
       mutate(Region=replace(Region, Country=="United Kingdom", "UKEEZ")) %>%
       mutate(Region=replace(Region, Region=="Labrador offshore", "Newfoundland-Labrador Shelf")) %>%
       mutate(Region=replace(Region, Region=="NWT", "Northwest Territories")) %>%
-     left_join(area_fishing, by="Region") %>% 
-     left_join(area_mining, by="Region") %>% 
-     left_join(area_eez, by="Region") %>% 
-      mutate(Area_km = rowSums(.[7:9], na.rm=TRUE)) %>%
-      select(-c(Area_km.x, Area_km.y)) %>%
-      mutate(adj_intensity = 1000*intensity/Area_km)
+     left_join(area_oilandgas, by="Region") %>%
+     mutate(adj_intensity = 10000*intensity/Area_km)
 
 #Shipping_distance
 shipping <- intensitydf %>% filter(Industry=="Shipping_distance") %>%
