@@ -505,11 +505,28 @@ plotfunIntensity(map_data=wells_data,
 #OIL AND GAS Time series----
 #Exploration and Development across time
 #read in table
-tbl <- read.csv(paste0(wd, "/Intermediate/Oilandgas_wells_long.csv"), fileEncoding = "UTF-8-BOM")
+tbl <- read.csv("Analysis/Intermediate/Oilandgas_wells_long.csv", fileEncoding = "UTF-8-BOM")
 tbl2 <- tbl[tbl$Region != "All", ] %>% droplevels()
-tbl3 <- tbl2 %>% filter(Metric=="All") %>% group_by(Country, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
+tbl3 <- tbl2 %>% filter(Metric=="All" & Country!="United Kingdom") %>% group_by(Country, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
 
-tbl3$Country <- factor(tbl3$Country, levels=c("Alaska", "Norway", "Canada", "United Kingdom", "Greenland"))
+tbl3$Country <- factor(tbl3$Country, levels=c("Alaska", "Norway", "Canada", "Greenland"))
+
+#Plot timeseries, separate panel for each country
+p <- ggplot(tbl3, aes(x=year, y=nwells)) + 
+  #geom_area(stat='identity', position='identity', alpha=0.6) +
+  #geom_line(alpha=0.6) +
+  geom_line(col="black") +
+  facet_wrap(vars(Country), ncol=2, scales="free_y") +
+  #facet_wrap(vars(Country), ncol=2) +
+  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Wells spudded") +
+  theme_minimal(18) +
+  theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1), 
+        axis.ticks.x = element_line(colour="grey92"), 
+        panel.spacing = unit(0.25, units="in"),
+        strip.text=element_text(size=16, vjust=1, hjust=0))
+ggsave(filename=paste0("Figures/", "Arctic_Oilandgas_timeseries_bycountry_facets.png"), p, width = 14, height=7)
 
 #timeseries By country
 p <- ggplot(tbl3, aes(x=year, y=nwells, fill=Country)) +
@@ -585,12 +602,29 @@ ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries_marine.png"), 
 
 #Plot number of mines operating in each year
 #load and summarise data
-minesOp <- read.csv("Intermediate/Mining_nmines_operational_byyear.csv", header=TRUE)
-plotdfOp <- minesOp %>% group_by(Country, year) %>% summarise(nmines=sum(nmines))
+mines <- read.csv("Analysis/Intermediate/Mining_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
+#names(mines)[1] <- "Country"
+plotdfOP <- mines %>% filter(Metric=="Operation") %>% group_by(Country, year) %>% summarise(nmines=sum(value, na.rm=TRUE))
 #change order of levels
 plotdfOP$Country <- factor(plotdfOP$Country, levels=rev(c("Greenland", "Canada", "USA", "Finland", "Norway", "Sweden", "Russia")))
 
-#Plot
+#Plot timeseries, separate panel for each country
+p <- ggplot(plotdfOP, aes(x=year, y=nmines)) + 
+  #geom_area(stat='identity', position='identity', alpha=0.6) +
+  #geom_line(alpha=0.6) +
+  geom_line(col="black") +
+  facet_wrap(vars(Country), ncol=4, scales="free_y") +
+  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
+  #scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+  xlab("Year") + ylab("Number of mines in operation") +
+  theme_minimal(18) +
+  theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1), 
+        axis.ticks.x = element_line(colour="grey92"), 
+        panel.spacing = unit(0.25, units="in"),
+        strip.text=element_text(size=16, vjust=1, hjust=0))
+ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_operational_facets.png"), p, width = 14, height=7)
+
+#Plot one plot
 p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country, col=Country)) + 
   geom_area(stat='identity', position='identity', alpha=0.6) +
   geom_line(alpha=0.6) +
@@ -636,8 +670,7 @@ ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_operation
 
 #Plot of how long mines have been in feasibility/conception
 #load and summarise data
-minesExpl <- read.csv("Intermediate/Mining_nmines_exploration_byyear.csv", header=TRUE)
-plotdfEx <- minesExpl %>% group_by(Country, year) %>% summarise(nmines=sum(nmines))
+plotdfEx <- mines %>% filter(Metric=="Exploration") %>% group_by(Country, year) %>% summarise(nmines=sum(value, na.rm=TRUE))
 #change order of levels
 plotdfEx$Country <- factor(plotdfEx$Country, levels=c("Greenland", "Canada", "USA", "Finland", "Norway", "Sweden", "Russia"))
 
@@ -662,14 +695,31 @@ p <- ggplot(plotdfEx, aes(x=year, y=nmines, fill=Country)) +
                       reverse = F, label.position = "bottom"))
 ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_exploration.png"), p)
 
-#Lollipot Plot of how long mines have been in feasibility/conception
-mines <- read.csv("Intermediate/Mining_listofMines_withdates.csv", header=TRUE)
-minesub <- mines %>% filter(Status=="Exploration") 
-minesub$Country <- factor(minesub$Country, levels=rev(c("Greenland", "Canada",  "Russia", "Finland", "Sweden", "USA", "Norway")))
-minesub <- arrange(minesub, Country, desc(Start))
-minesub$x <- 1:nrow(minesub)
+#Stats of how long mines have been in feasibility/conception
+minesEx <- read.csv("Analysis/Intermediate/Mining_listofMines_withdates.csv", header=TRUE)
+minesEx <- minesEx %>% filter(Status=="Exploration") 
+minesEx$Country <- factor(minesEx$Country, levels=rev(c("Greenland", "Canada",  "Russia", "Finland", "Sweden", "USA", "Norway")))
+minesEx <- arrange(minesEx, Country, desc(Start))
+minesEx$x <- 1:nrow(minesEx)
+minesEx$Stop[is.na(minesEx$Stop)] <- 2018
 
-p <- ggplot(minesub) + 
+minesExStats <- minesEx %>% mutate(nyrs=Stop-Start) %>% 
+            summarise(median=median(nyrs),
+                      mean=mean(nyrs), 
+                      min=min(nyrs),
+                      max=max(nyrs))
+minesExStatsbyCountry <- minesEx %>% group_by(Country, Region) %>%
+  mutate(nyrs=Stop-Start) %>% 
+  summarise(nmines=n(),
+            median=median(nyrs),
+            mean=mean(nyrs), 
+            min=min(nyrs),
+            max=max(nyrs))
+write.csv(minesExStatsbyCountry, "Analysis/Output/Mining_nyrs_inexploration_bycountry.csv", row.names=FALSE)
+
+
+#Lollipot Plot of how long mines have been in feasibility/conception
+p <- ggplot(minesEx) + 
   geom_segment(aes(x=x, xend=x, y=Start, yend=Stop, color=Country), size=1) +
   #geom_point(aes(x=x, y=Start, color=Country), size=2) +
   #geom_point(aes(x=x, y=Stop, color=Country), size=2) +
