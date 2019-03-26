@@ -128,12 +128,7 @@ mining <- intensitydf %>% filter(Industry=="Mining") %>%
 
 #Oil and gas
 oilandgas <- intensitydf %>% filter(Industry=="OilandGas") %>%
-      mutate(Region=replace(Region, Country=="Greenland" & Region=="Offshore", "Greenland offshore")) %>%
-      mutate(Region=replace(Region, Country=="Greenland" & Region=="Onshore", "Greenland")) %>%
-      mutate(Region=replace(Region, Country=="United Kingdom", "UKEEZ")) %>%
-      mutate(Region=replace(Region, Region=="Labrador offshore", "Newfoundland-Labrador Shelf")) %>%
-      mutate(Region=replace(Region, Region=="NWT", "Northwest Territories")) %>%
-     left_join(area_oilandgas, by="Region") %>%
+    left_join(area_oilandgas, by="Region") %>%
      mutate(adj_intensity = 10000*intensity/Area_km)
 
 #Shipping_distance

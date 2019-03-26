@@ -270,6 +270,9 @@ template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas3")
     summarize(Area_km=mean(Area_km),
               intensity=sum(intensity),
               adj_intensity=sum(adj_intensity)) 
+  #add a row for the Faroes - I found this data manually
+  tbl_ed <- add_row(tbl_ed, Region="FaroesEEZ",Area_km=212113.841213,
+                     intensity=9, adj_intensity=10000*9/212113.841213)
 
   
 #merge table to sf
@@ -279,8 +282,7 @@ wells_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
 plotfunIntensity(map_data=wells_data, 
                  mapped_col="adj_intensity", 
                  mycols = c("lightcyan2", rev(viridisLite::magma(8)[2:6])),
-                 pretty_breaks=c(5, 10, 30), ndecimals=1, 
-                 pretty_breaks=c(5, 10, 30, 65), ndecimals=1, 
+                 pretty_breaks=c(0.5, 2, 5, 10, 30), ndecimals=1, 
                  legendtitle=expression(paste(Wells~per~{10}, ",000", ~km^{2})), 
                  titletext="C. Oil and gas", subtext="")
                  #titletext="Arctic oil and gas", subtext="Density", caption="Any development or exploration wells drilled after 1960")
