@@ -3,6 +3,7 @@
 require(tidyverse)
 require(ggplot2)
 require(readxl)
+require(sf)
 
 
 wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis"
@@ -67,13 +68,17 @@ write_excel_csv(tur_all, "Intermediate/All_tourism_long.csv")
 
 #Oil and gas
 #wells
-wells <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="oilandgas_wells", range="A1:CJ49")
+wells <- read_sf(dsn="D:/Box Sync/Arctic/Data/Landuse/Oil_gas/Arctic_amap", layer="Wells_oil_and_gas_arctic_nocanadanwtoffshore_amap_plusregion" )
+wells <- wells %>% st_set_geometry(NULL)
+names(wells)[7:10] <- c("Status", "Type", "Start_yr", "End_yr")
 wells$Country <- as.factor(wells$Country)
 wells$Region <- as.factor(wells$Region)
 wells$Metric <- as.factor(wells$Type)
-wells <- wells[wells$Region!="North Sea",]
-wells_long <- gather(wells, key=year, value=value, "1920":"2018")
-wells_long <- wells_long %>% group_by(Country, Region, Metric, year) %>% summarise(value=sum(value, na.rm=TRUE))
+#fix year where blank or >2018
+wells$year <- wells$Start_yr
+wells$year[wells$Start_yr==0] <- wells$End_yr[wells$Start_yr==0]
+wells$year[wells$Start_yr>2018] <- wells$End_yr[wells$Start_yr>2018]
+wells_long <- wells %>% group_by(Country, Region, Metric, year) %>% summarise(value=n())
 write_excel_csv(wells_long, "Intermediate/Oilandgas_wells_long.csv")
 
 #mining
@@ -194,6 +199,6 @@ alldat <- bind_rows(alldat)
 alldat$Country[alldat$Country %in% c("Svalbard & Jan Mayen", "Svalbard and Jan Mayen")] <- "Svalbard"
 alldat <- alldat %>% mutate_at(c("Country", "Region", "Industry", "subIndustry"), funs(factor)) %>% #convert to factors
   filter(!is.na(value)) #drop NAs
-write_excel_csv(alldat, paste0(dirname(wd), "/Model/All_industries_long.csv")) #for fileEncoding = "UTF-8-BOM"
+write_excel_csv(alldat, paste0(dirname(wd), "/Output/All_industries_long.csv")) #for fileEncoding = "UTF-8-BOM"
 
 
