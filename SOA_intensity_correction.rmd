@@ -100,9 +100,9 @@ area_fishing <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_
 area_mining <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining.shp") 
   st_geometry(area_mining) <- NULL
   area_mining <- area_mining %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
-area_mining2 <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining2.shp") 
-  st_geometry(area_mining2) <- NULL
-  area_mining2 <- area_mining2 %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
+#area_mining2 <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_mining2.shp") 
+  #st_geometry(area_mining2) <- NULL
+  #area_mining2 <- area_mining2 %>% group_by(Region) %>% summarise(Area_km = sum(Area_km))
 area_oilandgas <- read_sf("D:/Box Sync/Arctic/Data/Boundaries/Arctic_circle/State_of_Arctic/SOA_borders_for_oilandgas3.shp") 
   st_geometry(area_oilandgas) <- NULL
   area_oilandgas <- area_oilandgas %>% group_by(Region) %>% summarise(Area_km = sum(SUM_Area_k))
@@ -123,7 +123,7 @@ popn <- intensitydf %>% filter(Industry=="Population") %>%
 
 #Mining
 mining <- intensitydf %>% filter(Industry=="Mining") %>%
-      left_join(area_mining2, by="Region") %>% 
+      left_join(area_popn, by="Region") %>% #we use this one as mining2 had kamchatcha below60N but we don't have data for that area
       mutate(adj_intensity = 10000*intensity/Area_km)
 
 #Oil and gas
