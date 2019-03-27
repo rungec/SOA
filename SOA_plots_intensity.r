@@ -262,21 +262,24 @@ tbl_ed <- tbl %>% filter(subIndustry=="Domestic_tourism") %>% select(Region, int
 #####################
 #OIL AND GAS All----
 #read in template
-template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas3")
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_oilandgas4")
   #manipulate table
   tbl_ed <- tbl %>% filter(Industry =="OilandGas") %>% 
-    select(Region, intensity, adj_intensity, Area_km) %>% #both development and exploration wells
-    group_by(Region) %>%
+    select(Country, Region, intensity, adj_intensity, Area_km) %>% #both development and exploration wells
+    group_by(Country, Region) %>%
     summarize(Area_km=mean(Area_km),
               intensity=sum(intensity),
-              adj_intensity=sum(adj_intensity)) 
+              adj_intensity=sum(adj_intensity)) %>% ungroup()
   #add a row for the Faroes - I found this data manually
-  tbl_ed <- add_row(tbl_ed, Region="FaroesEEZ",Area_km=212113.841213,
+  tbl_ed <- add_row(tbl_ed, Country="Faroe Islands", Region="FaroesEEZ",Area_km=212113.841213,
                      intensity=9, adj_intensity=10000*9/212113.841213)
+  #add a row for the 1970s Nunuvut drilling - I found this data manually
+  tbl_ed <- add_row(tbl_ed, Country="Canada", Region="Northern Canadian Archipelago", Area_km=464922.707407,
+                     intensity=180, adj_intensity=10000*180/464922.707407)
 
   
 #merge table to sf
-wells_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
+wells_data <- merge(template, tbl_ed, by=c("Country", "Region"), all.x=TRUE)
 
 #plot Density
 plotfunIntensity(map_data=wells_data, 
@@ -341,12 +344,12 @@ plotfunIntensity(map_data=wells_data,
 
 #####################
 #MINING ----
-template <- read_sf(dsn=datawd, layer="SOA_borders_for_popn2")
+template <- read_sf(dsn=datawd, layer="SOA_borders_for_popn2") #we use this one because mining2 has kamchatcha below 60N
 
 tbl_ed <- tbl %>% filter(subIndustry =="Mining")
 #merge table to sf
 mine_data <- merge(template, tbl_ed, by=c("Region"), all.x=TRUE)
-mine_data$adj_intensity <- mine_data$adj_intensity
+#mine_data$adj_intensity <- mine_data$adj_intensity
 
 #Plot density
 plotfunIntensity(map_data=mine_data, 
