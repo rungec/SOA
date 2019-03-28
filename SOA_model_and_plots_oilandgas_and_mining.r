@@ -40,6 +40,11 @@ oag <- alldat %>% filter(Industry=="OilandGas") %>%
         filter(year >= 1950 & year <=2017) %>%
         droplevels() 
 
+#Mining: all data is in number of active mines
+mines <- alldat %>% filter(Industry=="Mining" & Metric!="Exploration") %>% 
+          filter(!year==0) %>%
+          filter(year >= 1950 & year <=2017) %>%
+          droplevels()
 
 
 ##########################
@@ -89,7 +94,7 @@ bestmodplot <- function(bestmod, currdf, bycountry, pwidth, pheight){
           geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
           geom_line(aes(y=fit), col="black") +
           theme(legend.position="none") +
-          theme_minimal()
+          theme_minimal(18)
         ggsave(filename=paste0(i, "_timeseries.png"), p, width = pwidth, height=pheight)
      
        } else if (bycountry==TRUE) {
@@ -103,7 +108,7 @@ bestmodplot <- function(bestmod, currdf, bycountry, pwidth, pheight){
           geom_line(aes(y=fit), col="black") +
           facet_wrap(~Country) +
           theme(legend.position="none") +
-          theme_minimal()
+          theme_minimal(18)
         ggsave(filename=paste0(i, "_timeseries_bycountry.png"), p, width = pwidth, height=pheight)
       }
 }
@@ -130,6 +135,7 @@ mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oa
 mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp)
 
 modelsummaryfun(i, mod1, mod2, oag_exp)
+bestmodplot(mod2, oag_exp, TRUE, 9, 7)
   
 ##########################
 #Model oil and gas development, all regions  except russia 1950-2017 ----
@@ -137,7 +143,7 @@ i <- "Oilandgas_Development_allregions"
 #Set up normalised data
 oag_dev <- oag %>% filter(subIndustry=="Oilandgas_Development") %>%
   group_by(Country, year) %>% 
-  summarise(nwells=sum(value_raw, na.rm=TRUE)) %>%
+  summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% droplevels() %>%
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
 mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_dev)
@@ -145,6 +151,7 @@ mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oa
 mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_dev)
 
 modelsummaryfun(i, mod1, mod2, oag_dev)
+bestmodplot(mod2, oag_dev, TRUE, 12, 5)
 
 ##########################
 #Model offshore exploration, all regions except russia 1970-2017 ----
@@ -161,6 +168,7 @@ mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oa
 mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp_off)
 
 modelsummaryfun(i, mod1, mod2, oag_exp_off)
+bestmodplot(mod1, oag_exp_off, TRUE, 9, 7)
 
 ##########################
 #Model offshore development, all regions  except russia 1970-2017 ----
@@ -171,11 +179,13 @@ oag_dev_off <- oag %>% filter(subIndustry=="Oilandgas_Development" & Offshore==T
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>%
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_dev_off)
+#only one country, so we drop country from the model
+mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=oag_dev_off)
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_dev_off)
+mod2 <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year), data=oag_dev_off)
 
 modelsummaryfun(i, mod1, mod2, oag_dev_off)
+bestmodplot(mod1, oag_dev_off, TRUE, 9, 7)
 
 ##########################
 #Model oil and gas exploration, aggregated all regions except russia 1950-2017 ----
@@ -237,9 +247,10 @@ oag_dev_agg_off_df <- bind_cols(oag_dev_agg_off, preds) %>% mutate(subIndustry="
 
 
 ##########################
-# PLOT OIL AND GAS TRENDS
+# PLOT OIL AND GAS TRENDS for SI ----
 ##########################
 
+#Plot number of wells spudded (all regions), overlaid with exploration and development trendlines (plus SI) from models
 #exploration vs development time series
 oagplotdf <- bind_rows(oag_exp_agg_df, oag_dev_agg_df)
 p <- ggplot(oagplotdf, aes(x=year, y=nwells, fill=subIndustry, group=subIndustry)) +
@@ -264,6 +275,7 @@ p <- ggplot(oagplotdf, aes(x=year, y=nwells, fill=subIndustry, group=subIndustry
                       reverse = T, label.position = "bottom"))
 ggsave(filename=paste0("Arctic_Oil_and_Gas_Timeseries.png"), p)
 
+#Plot number of wells spudded offshore (all regions), overlaid with exploration and development trendlines (plus SI) from models
 #Marine timeseries
 oagplotdfoff <- bind_rows(oag_exp_agg_off_df, oag_dev_agg_off_df)
 p <- ggplot(oagplotdfoff, aes(x=year, y=nwells, fill=subIndustry, group=subIndustry)) +
@@ -295,95 +307,77 @@ ggsave(filename=paste0("Arctic_Oil_and_Gas_Timeseries_marine.png"), p)
 # MINING Models ----
 ##########################
 
-#Model mines, all regions except russia 1950-2017
+#Model mines, all regions 1950-2017
+i <- "Mining_allregions"
+#Set up normalised data
+mines_all <- mines %>% 
+  group_by(Country, year) %>% 
+  summarise(nmines=sum(value_raw, na.rm=TRUE)) %>%
+  mutate(znorm = scale(nmines, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
+
+mod1 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_all)
+
+modelsummaryfun(i, mod1, mod2, mines_all)
+
+#Model mines, all regions 1950-2017 normalised
+i <- "Mining_allregions_znorm"
+
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all)
+#Add in temporal autocorrelation with 1yr lag
+#mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=10, q=0), data=mines_all)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_all)
+
+modelsummaryfun(i, mod1, mod2, mines_all)
+bestmodplot(mod2, mines_all, TRUE, 9, 7)
+
+#Model mines, all regions except russia aggregated 1950-2017 normalised
+i <- "Mining_no_russia_znorm"
+#Set up normalised data
+mines_noruss <- mines_all %>% filter(Country!="Russia") 
+
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_noruss)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_noruss)
+
+modelsummaryfun(i, mod1, mod2, mines_noruss)
+bestmodplot(mod2, mines_noruss, TRUE, 9, 7)
 
 #Model mines, russia 1950-2017
+i <- "Mining_russia_znorm"
+#Set up normalised data
+mines_russ <- mines_all %>% filter(Country=="Russia") 
 
+mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=mines_russ)
+#Add in temporal autocorrelation with 1yr lag
+mod2 <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_russ)
+#looks like we can do a lm
+mod3 <- lm(znorm ~ year, data=mines_russ)
 
+modelsummaryfun(i, mod1, mod2, mines_russ)
 
+sink(paste0(i, "_allregions_summarystats.txt"), append=TRUE)
+print(summary(mod3))
+sink()
+
+preds <- predict(mod3, newdata=mines_russ, se=TRUE)
+preds <- bind_cols(mines_russ, data.frame(fit=preds$fit, se.fit=preds$se.fit))
+p <-  preds %>%  
+  ggplot(aes(x=year, y=znorm)) +
+  geom_point(col="black") +
+  geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+  geom_line(aes(y=fit), col="black") +
+  theme(legend.position="none") +
+  theme_minimal(18)
+ggsave(filename=paste0(i, "_timeseries.png"), p, width = 9, height=7)
 
 ##########################
-# Plots for SI ----
+# MINING Plots for SI ----
 ##########################
-
-#Plot number of wells spudded (all regions), overlaid with exploration and development trendlines (plus SI) from models
-
-
-
-
-
-
-#Plot number of wells spudded offshore (all regions), overlaid with exploration and development trendlines (plus SI) from models
-
-
 #Plot trendlines for mines active over time (1950s to present) by region 
 #OR for Russia and Finland vs rest of Arctic
 
-
-
-
-
-
-
-#exploration vs development time series
-#read in table
-
-p <- ggplot(tbl4, aes(x=year, y=nwells, fill=Metric)) +
-  geom_area(stat='identity', position='identity', alpha=0.5) +
-  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
-  scale_x_continuous(breaks=seq(1960, 2010, 10)) +
-  xlab("Year") + ylab("Wells spudded") +
-  theme_minimal() +
-  theme(legend.position=c(0.22, 0.80)) +
-  scale_fill_manual(values = viridisLite::magma(4)[2:3],
-                    name = element_blank(),
-                    guide = guide_legend(
-                      direction = "horizontal",
-                      keyheight = unit(3, units = "mm"),
-                      keywidth = unit(30 / length(labels), units = "mm"),
-                      title.position = 'top',
-                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
-                      byrow = T, # also the guide needs to be reversed
-                      reverse = T, label.position = "bottom"))
-ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries.png"), p)
-
-#Marine timeseries
-#dropped norwegian north sea
-tbl5 <- tbl2 %>% filter(Metric!="All" & Region %in% c("Labrador offshore", "Norwegian Sea", 
-                                                      "Barents Sea", "Offshore", "West Bering Sea", "Chukchi Sea", "Beaufort Sea")) %>% 
-  group_by(Metric, year) %>% summarise(nwells=sum(value, na.rm=TRUE))
-
-p <- ggplot(tbl5, aes(x=year, y=nwells, fill=Metric)) +
-  geom_area(stat='identity', position='stack', alpha=0.5) +
-  geom_line(tbl6, aes(x=year, y=nwells)) +
-  coord_cartesian(xlim=c(1970, 2017), expand=FALSE) + 
-  scale_x_continuous(breaks=seq(1970, 2010, 10)) +
-  xlab("Year") + ylab("Wells spudded") +
-  theme_minimal() +
-  theme(legend.position='bottom') +
-  scale_fill_manual(values = (viridisLite::viridis(4)[2:3]),
-                    name = element_blank(),
-                    guide = guide_legend(
-                      direction = "horizontal",
-                      keyheight = unit(3, units = "mm"),
-                      keywidth = unit(30 / length(labels), units = "mm"),
-                      title.position = 'top',
-                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
-                      byrow = T, # also the guide needs to be reversed
-                      reverse = T, label.position = "bottom"))
-
-ggsave(filename=paste0("Figures/", "Arctic_Oil_and_Gas_Timeseries_marine.png"), p)
-
-#####################
-#MINING PLOTS ----
-
-#Plot number of mines operating in each year
-#load and summarise data
-mines <- read.csv("Analysis/Intermediate/Mining_long.csv", header=TRUE, fileEncoding = "UTF-8-BOM")
-#names(mines)[1] <- "Country"
-plotdfOP <- mines %>% filter(Metric=="Operation") %>% group_by(Country, year) %>% summarise(nmines=sum(value, na.rm=TRUE))
-#change order of levels
-plotdfOP$Country <- factor(plotdfOP$Country, levels=rev(c("Greenland", "Canada", "USA", "Finland", "Norway", "Sweden", "Russia")))
 
 #Plot one plot
 p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country, col=Country)) + 
@@ -405,4 +399,4 @@ p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country, col=Country)) +
                       byrow = T, # also the guide needs to be reversed
                       reverse = F, label.position = "bottom")) +
   scale_colour_manual(values = rev(viridisLite::magma(9)[2:8]), guide = "none")
-ggsave(filename=paste0("Figures/", "Arctic_Mining_Timeseries_bycountry_operational.png"), p)
+ggsave(filename="Arctic_Mining_Timeseries_bycountry_operational.png", p)
