@@ -10,18 +10,21 @@ wd <- "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis"
 setwd(wd)
 
 #Ship dist
-shipdist <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_distancesailed_LME", range="A1:J81")
+shipdist <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_distancesailed", range="A1:J81")
 shipdist$Country <- as.factor(shipdist$Country)
 shipdist$Region <- as.factor(shipdist$region)
 shipdist$Metric <- as.factor(shipdist$ShipCat)
 shipdist_long <- gather(shipdist, key=year, value=value, "2012":"2018")
-write_excel_csv(shipdist_long, "Intermediate/Shipping_distance_LME_long.csv")
+shipdist_long <- shipdist_long[, c("Country", "Region", "Metric", "year", "value")]
+write_excel_csv(shipdist_long, "Intermediate/Shipping_distance_long.csv")
 
 #Ship trafficwork
-shiptraff <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_trafficwork_LME", range="A1:H3676")
-shiptraff <- shiptraff[shiptraff$Year < 2018, c("Country", "region", "shipweight", "ShipCat", "Year", "traffic_work_gTnm")]
-names(shiptraff) <- c("Country", "Region", "Shipweight", "ShipCat", "year", "value")
-write_excel_csv(shiptraff, "Intermediate/Shipping_trafficwork_LME_long.csv")
+shiptraff <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_trafficwork", range="A1:H3676")
+#shiptraff <- shiptraff[shiptraff$Year < 2018, c("Country", "region", "shipweight", "ShipCat", "Year", "traffic_work_gTnm")]
+#names(shiptraff) <- c("Country", "Region", "Shipweight", "ShipCat", "year", "value")
+shiptraff <- shiptraff[shiptraff$Year < 2018, c("Country", "region", "ShipCat", "Year", "traffic_work_gTnm")]
+names(shiptraff) <- c("Country", "Region", "Metric", "year", "value")
+write_excel_csv(shiptraff, "Intermediate/Shipping_trafficwork_long.csv")
 
 #Ship vol
 shipvol <- read_excel("Input/State_of_Arctic_all_data.xlsx", sheet="shipping_voltransported", range="A1:AB26")
@@ -128,7 +131,7 @@ write_excel_csv(rein_long, "Intermediate/Reindeer_long.csv")
 wd = "D:/Box Sync/Arctic/CONNECT/Paper_5_state_of_arctic/Analysis/Intermediate"
 
 #Industries
-industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Hunters", "Fishing", "Oilandgas_wells", "Mining", "Reindeer") # we analyse "Shipping_trafficwork" separately
+industries <- c("Cruise_tourism", "Domestic_tourism", "International_tourism", "Population", "Shipping_distance", "Shipping_trafficwork", "Hunters", "Fishing", "Oilandgas_wells", "Mining", "Reindeer") 
 
 #load and merge files
 alldat <- lapply(industries, function(i) {
@@ -145,13 +148,23 @@ alldat <- lapply(industries, function(i) {
   }
   
   if(i == "Shipping_distance"){ 
-    dat <- dat %>% filter(Country!="Total") %>% 
+    dat <- dat %>% filter(Country!="Total") %>%
+      mutate(subIndustry=Metric) %>%
       group_by(Country, Region, Industry, subIndustry, year) %>% 
       summarise(value=sum(value, na.rm=TRUE)) %>% #sum shipping distance across all types of shipping
-      mutate(Metric="nautical miles sailed all shipcats") %>% 
+      mutate(Metric="nautical miles sailed") %>% 
       mutate(value_raw=value)
-    dat$value[dat$value==0] <- 1 #add small constant to make growth rate calculation possible
-    
+    #dat$value[dat$value==0] <- 1 #add small constant to make growth rate calculation possible
+  } 
+  
+  if(i == "Shipping_trafficwork"){ 
+    dat <- dat %>%  
+      mutate(subIndustry=Metric) %>%
+      group_by(Country, Region, Industry, subIndustry, year) %>% 
+      summarise(value=sum(value, na.rm=TRUE)) %>% #sum shipping distance across all types of shipping
+      mutate(Metric="gTon nautical miles sailed") %>% 
+      mutate(value_raw=value)
+    #dat$value[dat$value==0] <- 1 #add small constant to make growth rate calculation possible
   } 
   
   if(i == "Fishing"){ 
