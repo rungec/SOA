@@ -69,7 +69,7 @@ modelsummaryfun <- function(i, m1, m2, currdf, ...){
     print("model 2 (errors adjusted for AR(1) temporal autocorrelation)")
     print(summary(m2$lme))
     print(summary(m2$gam))
-    print(anova(m2$lme, m1$lme)) #any difference in the random effects?
+    #print(anova(m2$lme, m1$lme)) #any difference in the random effects? ##This is not accurate for models with and without AR1
     png(paste0(i, "_allregions_model2_fit.png"), width=7, height=7, units="in", res=300)
       par(mfrow=c(2,2))
       print(gam.check(m2$gam))
@@ -130,9 +130,9 @@ oag_exp <- oag %>% filter(subIndustry=="Oilandgas_Exploration") %>%
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>%
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_exp)
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_exp, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_exp)
 bestmodplot(mod2, oag_exp, TRUE, 9, 7)
@@ -146,9 +146,9 @@ oag_dev <- oag %>% filter(subIndustry=="Oilandgas_Development") %>%
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% droplevels() %>%
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_dev)
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_dev, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_dev)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_dev, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_dev)
 bestmodplot(mod2, oag_dev, TRUE, 12, 5)
@@ -163,9 +163,9 @@ oag_exp_off <- oag %>% filter(subIndustry=="Oilandgas_Exploration" & Offshore==T
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>%
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_exp_off)
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=oag_exp_off, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp_off)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=oag_exp_off, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_exp_off)
 bestmodplot(mod1, oag_exp_off, TRUE, 9, 7)
@@ -180,9 +180,9 @@ oag_dev_off <- oag %>% filter(subIndustry=="Oilandgas_Development" & Offshore==T
   mutate(znorm = scale(nwells, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
 #only one country, so we drop country from the model
-mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=oag_dev_off)
+mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=oag_dev_off, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year), data=oag_dev_off)
+mod2 <- gamm(znorm ~ s(year), correlation = corAR1(form = ~ year), data=oag_dev_off, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_dev_off)
 bestmodplot(mod1, oag_dev_off, TRUE, 9, 7)
@@ -195,9 +195,9 @@ oag_exp_agg <- oag %>% filter(subIndustry=="Oilandgas_Exploration") %>%
   group_by(year) %>% 
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% ungroup() 
 
-mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_exp_agg)
+mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_exp_agg, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(nwells ~ s(year), correlation = corAR1(form = ~ year), data=oag_exp_agg)
+mod2 <- gamm(nwells ~ s(year), correlation = corAR1(form = ~ year), data=oag_exp_agg, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_exp_agg)
 bestmodplot(mod1, oag_exp_agg, FALSE, 9, 7)
@@ -212,9 +212,9 @@ oag_dev_agg <- oag %>% filter(subIndustry=="Oilandgas_Development") %>%
   group_by(year) %>% 
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% ungroup() 
 
-mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_dev_agg)
+mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_dev_agg, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(nwells ~ s(year), correlation = corAR1(form = ~ year), data=oag_dev_agg)
+mod2 <- gamm(nwells ~ s(year), correlation = corAR1(form = ~ year), data=oag_dev_agg, method="REML")
 
 modelsummaryfun(i, mod1, mod2, oag_dev_agg)
 bestmodplot(mod2, oag_exp_agg, FALSE, 9, 7)
@@ -229,7 +229,7 @@ oag_exp_agg_off <- oag %>% filter(subIndustry=="Oilandgas_Exploration" & Offshor
   group_by(year) %>% 
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% ungroup() 
 
-mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_exp_agg_off)
+mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_exp_agg_off, method="REML")
 preds <- predict(mod1$gam, newdata=oag_exp_agg_off, se=TRUE)
 oag_exp_agg_off_df <- bind_cols(oag_exp_agg_off, preds) %>% mutate(subIndustry="Offshore Exploration")
 
@@ -241,7 +241,7 @@ oag_dev_agg_off <- oag %>% filter(subIndustry=="Oilandgas_Development" & Offshor
   group_by(year) %>% 
   summarise(nwells=sum(value_raw, na.rm=TRUE)) %>% ungroup() 
 
-mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_dev_agg_off)
+mod1 <- gamm(nwells ~ s(year), correlation=NULL, data=oag_dev_agg_off, method="REML")
 preds <- predict(mod1$gam, newdata=oag_dev_agg_off, se=TRUE)
 oag_dev_agg_off_df <- bind_cols(oag_dev_agg_off, preds) %>% mutate(subIndustry="Offshore Development")
 
@@ -315,19 +315,19 @@ mines_all <- mines %>%
   summarise(nmines=sum(value_raw, na.rm=TRUE)) %>%
   mutate(znorm = scale(nmines, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
-mod1 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all)
+mod1 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_all)
+mod2 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_all, method="REML")
 
 modelsummaryfun(i, mod1, mod2, mines_all)
 
 #Model mines, all regions 1950-2017 normalised
 i <- "Mining_allregions_znorm"
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all)
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all, method="REML")
 #Add in temporal autocorrelation with 1yr lag
 #mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=10, q=0), data=mines_all)
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_all)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_all, method="REML")
 
 modelsummaryfun(i, mod1, mod2, mines_all)
 bestmodplot(mod2, mines_all, TRUE, 9, 7)
@@ -337,9 +337,9 @@ i <- "Mining_no_russia_znorm"
 #Set up normalised data
 mines_noruss <- mines_all %>% filter(Country!="Russia") 
 
-mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_noruss)
+mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_noruss, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_noruss)
+mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_noruss, method="REML")
 
 modelsummaryfun(i, mod1, mod2, mines_noruss)
 bestmodplot(mod2, mines_noruss, TRUE, 9, 7)
@@ -349,9 +349,9 @@ i <- "Mining_russia_znorm"
 #Set up normalised data
 mines_russ <- mines_all %>% filter(Country=="Russia") 
 
-mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=mines_russ)
+mod1 <- gamm(znorm ~ s(year), correlation=NULL, data=mines_russ, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_russ)
+mod2 <- gamm(znorm ~ s(year), correlation = corARMA(form = ~ year, p=1, q=0), data=mines_russ, method="REML")
 #looks like we can do a lm
 mod3 <- lm(znorm ~ year, data=mines_russ)
 
@@ -377,26 +377,49 @@ ggsave(filename=paste0(i, "_timeseries.png"), p, width = 9, height=7)
 ##########################
 #Plot trendlines for mines active over time (1950s to present) by region 
 #OR for Russia and Finland vs rest of Arctic
+#Model mining, aggregated except russia
+#set up data ----
+mines_agg <- mines_all %>% filter(Country!="Russia") %>%
+              group_by(year) %>%
+              summarise(nmines=sum(nmines, na.rm=TRUE)) %>% ungroup() %>% 
+              mutate(Country="Rest of Arctic")
 
+mod1 <- gamm(nmines ~ s(year), correlation=NULL, data=mines_agg, method="REML")
 
-#Plot one plot
-p <- ggplot(plotdfOP, aes(x=year, y=nmines, fill=Country, col=Country)) + 
-  geom_area(stat='identity', position='identity', alpha=0.6) +
-  geom_line(alpha=0.6) +
-  coord_cartesian(xlim=c(1900, 2017), expand=FALSE) + 
-  #scale_x_continuous(breaks=seq(1960, 2010, 10)) +
+preds <- predict(mod1$gam, newdata=mines_agg, se=TRUE)
+preds_all <- bind_cols(mines_agg, preds) 
+
+#Model mines, russia 1950-2017
+#Set up data
+mines_russ <- mines_all %>% filter(Country=="Russia") 
+#looks like we can do a lm
+mod3 <- gamm(nmines ~ s(year), correlation=NULL, data=mines_russ, method="REML")
+
+preds <- predict(mod3$gam, newdata=mines_russ, se=TRUE)
+preds_russ <- bind_cols(mines_russ, preds) 
+
+preds_all <- bind_rows(preds_all, preds_russ)
+
+#Plot mining trends ----
+p <- ggplot(preds_all, aes(x=year, y=nmines, fill=Country, group=Country)) +
+  geom_area(stat='identity', position='identity', alpha=0.5) +
+  geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+  geom_line(aes(y=fit, col=Country)) +
+  coord_cartesian(xlim=c(1950, 2017), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(1960, 2010, 10)) +
   xlab("Year") + ylab("Number of mines in operation") +
-  theme_minimal() +
+  theme_minimal(18) +
   theme(legend.position="bottom") +
-  scale_fill_manual(values = rev(viridisLite::magma(9)[2:8]),
-                    name = element_blank(), 
+  scale_color_manual(values = viridisLite::magma(4)[2:3], guide = "none") +
+  scale_fill_manual(values = viridisLite::magma(4)[2:3],
+                    name = element_blank(),
                     guide = guide_legend(
                       direction = "horizontal",
                       keyheight = unit(3, units = "mm"),
-                      keywidth = unit(30/length(labels), units = "mm"),
+                      keywidth = unit(30 / length(labels), units = "mm"),
                       title.position = 'top',
                       title.hjust = 0.5, label.hjust = 1, nrow = 1,
                       byrow = T, # also the guide needs to be reversed
-                      reverse = F, label.position = "bottom")) +
-  scale_colour_manual(values = rev(viridisLite::magma(9)[2:8]), guide = "none")
-ggsave(filename="Arctic_Mining_Timeseries_bycountry_operational.png", p)
+                      reverse = T, label.position = "bottom"))
+ggsave(filename=paste0("Arctic_Mining_Timeseries_bycountry_operational.png"), p, width=10, height=7)
+
