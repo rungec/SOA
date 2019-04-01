@@ -63,7 +63,7 @@ bestmodplot <- function(i, bestmod, currdf, region){
       geom_point(col="black") +
       geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
       geom_line(aes(y=fit), col="black") +
-      facet_wrap(~Region, nrow=3) +
+      facet_wrap(~Region, ncol=4) +
       theme_minimal(18) +
       theme(legend.position="none", axis.text.x = element_text(size=10)) 
     ggsave(filename=paste0(i, "_timeseries_byregion.png"), p, width = 14, height=7)
@@ -76,7 +76,7 @@ bestmodplot <- function(i, bestmod, currdf, region){
     geom_line(aes(y=fit), col="black") +
     theme(legend.position="none") +
     theme_minimal(18)
-  ggsave(filename=paste0(i, "_timeseries_trend.png"), p, width = 7.77, height=4.35)
+  ggsave(filename=paste0(i, "_timeseries_trend.png"), p, width = 7.77, height=5)
   
 }
 
@@ -111,6 +111,7 @@ collapsedf <- znormdat %>% filter(Group=="Stock collapse") %>% droplevels
 mod2 <- gam(znorm ~ s(year) + s(Region, bs="re"), data=collapsedf, method="REML")
 modelsummaryfun2("Fishing_stockcollapseregions", mod2, collapsedf)
 bestmodplot("Fishing_stockcollapseregions", mod2, collapsedf, TRUE)
+bestmodplot("Fishing_stockcollapseregions", mod2, collapsedf, FALSE)
 
 #Model regions that didn't have stock collapse ----
 
@@ -119,7 +120,7 @@ otherdf <- znormdat %>% filter(Group=="No collapse") %>% droplevels
 mod3 <- gam(znorm ~ s(year) + s(Region, bs="re"), data=otherdf, method="REML")
 modelsummaryfun2("Fishing_otherregions", mod3, otherdf)
 bestmodplot("Fishing_otherregions", mod3, otherdf, TRUE)
-
+bestmodplot("Fishing_otherregions", mod3, otherdf, FALSE)
 
 ##########################
 ### Plot all Fisheries ----
@@ -134,7 +135,7 @@ preds_all$Group <- as.factor(preds_all$Group)
 
 
 p <- ggplot(preds_all, aes(x=year, y=znorm, fill=Group, group=Group)) +
-  #geom_area(stat='identity', position='identity', alpha=0.5) +
+  #geom_point(col="grey70", alpha=0.5) +
   geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.5)+
   geom_line(aes(y=fit, col=Group)) +
   coord_cartesian(xlim=c(1950, 2014), ylim=c(-2.5, 2.5), expand=FALSE) + 
@@ -155,4 +156,29 @@ p <- ggplot(preds_all, aes(x=year, y=znorm, fill=Group, group=Group)) +
                       reverse = T, label.position = "bottom"))
 
 ggsave(filename=paste0("Arctic_Fisheries_Timeseries.png"), p, width=10, height=7)
+
+
+p <- ggplot(preds_all, aes(x=year, y=znorm, fill=Group, group=Group)) +
+  #geom_point(col="grey70", alpha=0.5) +
+  geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.5)+
+  geom_line(aes(y=fit, col=Group)) +
+  coord_cartesian(xlim=c(2000, 2014), ylim=c(-2.5, 2.5), expand=FALSE) + 
+  scale_x_continuous(breaks=seq(2000, 2012, 4)) +
+  xlab("Year") + ylab("znorm") +
+  theme_minimal(18) +
+  theme(legend.position=c(0.7, 0.16)) +
+  scale_color_manual(values = viridisLite::magma(4)[2:3], guide = "none") +
+  scale_fill_manual(values = viridisLite::magma(4)[2:3],
+                    name = element_blank(),
+                    guide = guide_legend(
+                      direction = "horizontal",
+                      keyheight = unit(3, units = "mm"),
+                      keywidth = unit(30 / length(labels), units = "mm"),
+                      title.position = 'top',
+                      title.hjust = 0.5, label.hjust = 1, nrow = 1,
+                      byrow = T, # also the guide needs to be reversed
+                      reverse = T, label.position = "bottom"))
+
+ggsave(filename=paste0("Arctic_Fisheries_Timeseries_2000s.png"), p, width=10, height=7)
+
 
