@@ -1,13 +1,10 @@
-require(knitr)
+
 require(tidyverse)
 require(lubridate)
 require(itsadug) #for gam visualisation
 require(mgcv) #for gam mixed effects models
-require(broom) #augment
 require(modelr)
 require(gridExtra) #for grid.arrange
-#require(ggfortify) #for autoplot
-require(pander) #for pander table
 require(ggpubr) #for ggarrange
 
 ##########################
@@ -361,14 +358,14 @@ ggsave(filename=paste0("Arctic_Oil_and_Gas_Timeseries_znorm.png"), p, width=7, h
 # MINING Models ----
 ##########################
 
-#Model mines, all regions 1950-2017
-i <- "Mining_allregions"
 #Set up normalised data
 mines_all <- mines %>% 
   group_by(Country, year) %>% 
   summarise(nmines=sum(value_raw, na.rm=TRUE)) %>%
   mutate(znorm = scale(nmines, center=TRUE, scale=TRUE) %>% as.vector) %>% ungroup() #### Normalisation
 
+#Model mines, all regions 1950-2017
+i <- "Mining_allregions"
 mod1 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_all, method="REML")
 #Add in temporal autocorrelation with 1yr lag
 mod2 <- gamm(nmines ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_all, method="REML")
@@ -393,7 +390,7 @@ mines_noruss <- mines_all %>% filter(Country!="Russia")
 
 mod1 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation=NULL, data=mines_noruss, method="REML")
 #Add in temporal autocorrelation with 1yr lag
-mod2 <- gamm(znorm ~ s(year), random=list(Country=~1), correlation = corAR1(form = ~ year), data=mines_noruss, method="REML")
+mod2 <- gamm(znorm ~ s(year, k=9), random=list(Country=~1), correlation = corAR1(form = ~ year|Country), data=mines_noruss, method="REML")
 
 modelsummaryfun(i, mod1, mod2, mines_noruss)
 bestmodplot(mod2, mines_noruss, TRUE, 9, 7)
@@ -477,3 +474,76 @@ p <- ggplot(preds_all, aes(x=year, y=nmines, fill=Country, group=Country)) +
                       reverse = T, label.position = "bottom"))
 ggsave(filename=paste0("Arctic_Mining_Timeseries_bycountry_operational.png"), p, width=10, height=7)
 
+####################
+#Trying to get AR(1) to work with gam()
+
+modelsummaryfun <- function(i, m1, currdf, ...){
+  #modelsummaryfun <- function(i, m1, m2, currdf, ...){
+  
+  #plot the model autocorrelation and acf plot
+  png(paste0(i, "_modelcomparison_ACFplots.png"), width=7, height=4.35, units="in", res=300)
+  par(mfrow=c(1,2))
+  acf(resid(m1), lag=5, main="ACF")
+  pacf(resid(m1), lag=5, main="PACF")
+  dev.off()
+  
+  sink(paste0(i, "_summarystats.txt"))
+  print("model may have temporal autocorrelation")
+  print(summary(m1))
+  png(paste0(i, "_model_gamcheck.png"), width=7, height=7, units="in", res=300)
+  par(mfrow=c(2,2))
+  print(gam.check(m1))
+  dev.off()
+  sink()
+  
+  #Plot the model with and without temporal autocorrelation
+  png(paste0(i, "_model_residuals.png"), width=7.77, height=4.35, units="in", res=200)
+  par(mfrow=c(1,3))
+  plot(m1)
+  dev.off()
+}
+
+
+bestmodplot <- function(i, bestmod, currdf, region){
+  preds <- predict(bestmod, newdata=currdf, se=TRUE)
+  preds <- bind_cols(currdf, preds)
+  
+  if(region==TRUE){
+    #Plot the model by region
+    p <-  preds %>%  
+      ggplot(aes(x=year, y=znorm)) +
+      geom_point(col="black") +
+      geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+      geom_line(aes(y=fit), col="black") +
+      facet_wrap(~Country, nrow=3) +
+      theme_minimal(18) +
+      theme(legend.position="none", axis.text.x = element_text(size=10)) 
+    
+    ggsave(filename=paste0(i, "_timeseries_bycountry.png"), p, width = 14, height=7)
+  }
+  
+  p <-  preds %>%  
+    ggplot(aes(x=year, y=znorm)) +
+    geom_point(col="black") +
+    geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.2, fill="grey30")+
+    geom_line(aes(y=fit), col="black") +
+    theme(legend.position="none") +
+    theme_minimal(18)
+  ggsave(filename=paste0(i, "_timeseries_trend.png"), p, width = 7.77, height=4.35)
+  
+}
+
+mines_noruss <- start_event(data.frame(mines_noruss), column="year", event=c("Country"), label.event="Event")
+
+mod1 <- gam(znorm ~ s(year) + s(Country, bs='re'), data=mines_noruss, method="REML")
+mod2 <- gam(znorm ~ s(year) + s(Country, bs='re'), AR.start=start.event, rho=0.9, data=mines_noruss, method="REML")
+
+i <- "Mining_no_russia_znorm1"
+modelsummaryfun(i, mod1, mines_noruss)
+bestmodplot(i, mod1, mines_noruss, TRUE)
+
+i <- "Mining_no_russia_znorm2"
+modelsummaryfun(i, mod2, mines_noruss)
+bestmodplot(i, mod2, mines_noruss, TRUE)
+
+#for some reason these models look the same ... what is wrong with this setup?
