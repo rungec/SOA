@@ -1,13 +1,10 @@
-require(knitr)
+
 require(tidyverse)
 require(lubridate)
 require(itsadug) #for gam visualisation
 require(mgcv) #for gam mixed effects models
-require(broom) #augment
 require(modelr)
 require(gridExtra) #for grid.arrange
-#require(ggfortify) #for autoplot
-require(pander) #for pander table
 require(ggpubr) #for ggarrange
 
 ##########################
@@ -110,7 +107,7 @@ bestmodplot <- function(i, bestmod, currdf, region, shipcat){
 
 i <- "Shipping_distance"
 
-mod1 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shipdist)
+mod1 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shipdist, method='REML')
 modelsummaryfun(i, mod1, shipdist)
 bestmodplot(i, mod1, shipdist, TRUE, TRUE)
 
@@ -118,7 +115,7 @@ bestmodplot(i, mod1, shipdist, TRUE, TRUE)
 i <- "Shipping_distance_no2012"
 shipdist_sub <- shipdist %>% filter(year>2012)
 
-mod2 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shipdist_sub)
+mod2 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shipdist_sub, method='REML')
 modelsummaryfun(i, mod2, shipdist_sub)
 bestmodplot(i, mod2, shipdist_sub, TRUE, TRUE)
 
@@ -135,24 +132,24 @@ bestmodplot(i, mod2, shipdist_sub, TRUE, TRUE)
 # modelsummaryfun(i, mod6, shipdist_sub, TRUE, TRUE)
 
 #aggregate ship cat, region as random effect
-i <- "Shipping_distance_aggregatedshipcat"
-shipdist_agg <- shipdist  %>%
+i <- "Shipping_distance_aggregatedshipcat_no2012"
+shipdist_agg <- shipdist_sub  %>%
           group_by(Region, year) %>%
           summarise(value=sum(value)) %>%
           mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
 
-mod7 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re"), data=shipdist_agg)
+mod7 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re"), data=shipdist_agg, method='REML')
 bestmodplot(i, mod7, shipdist_agg, shipcat=FALSE, region=TRUE)
 modelsummaryfun(i, mod7, shipdist_agg)
 
 #aggregate region, shipcat as random effect
-i <- "Shipping_distance_aggregatedregion"
-shipdist_agg2 <- shipdist  %>%
+i <- "Shipping_distance_aggregatedregion_no2012"
+shipdist_agg2 <- shipdist_sub  %>%
           group_by(subIndustry, year) %>%
           summarise(value=sum(value)) %>%
           mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
 
-mod8 <- gam(znorm ~ s(year, k=1) + s(subIndustry, bs="re"), data=shipdist_agg2)
+mod8 <- gam(znorm ~ s(year, k=4) + s(subIndustry, bs="re"), data=shipdist_agg2, method='REML')
 bestmodplot(i, mod8, shipdist_agg2, region=FALSE, shipcat=TRUE)
 modelsummaryfun(i, mod8, shipdist_agg2)
 
@@ -165,7 +162,7 @@ modelsummaryfun(i, mod8, shipdist_agg2)
 
 i <- "Shipping_trafficwork"
 
-mod9 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shiptraff)
+mod9 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shiptraff, method='REML')
 modelsummaryfun(i, mod9, shiptraff)
 bestmodplot(i, mod9, shiptraff, TRUE, TRUE)
 
@@ -173,30 +170,30 @@ bestmodplot(i, mod9, shiptraff, TRUE, TRUE)
 i <- "Shipping_trafficwork_no2012"
 shiptraff_sub <- shiptraff %>% filter(year>2012)
 
-mod10 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shiptraff_sub)
+mod10 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re")+ s(subIndustry, bs="re"), data=shiptraff_sub, method='REML')
 modelsummaryfun(i, mod10, shiptraff_sub)
 bestmodplot(i, mod10, shiptraff_sub, TRUE, TRUE)
 
 
 #aggregate ship cat, region as random effect
-i <- "Shipping_trafficwork_aggregatedshipcat"
-shiptraff_agg <- shiptraff  %>%
+i <- "Shipping_trafficwork_aggregatedshipcat_no2012"
+shiptraff_agg <- shiptraff_sub  %>%
   group_by(Region, year) %>%
   summarise(value=sum(value)) %>%
   mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
 
-mod11 <- gam(znorm ~ s(year, k=1) + s(Region, bs="re"), data=shiptraff_agg)
+mod11 <- gam(znorm ~ s(year, k=4) + s(Region, bs="re"), data=shiptraff_agg, method='REML')
 bestmodplot(i, mod11, shiptraff_agg, shipcat=FALSE, region=TRUE)
 modelsummaryfun(i, mod11, shiptraff_agg)
 
 #aggregate region, shipcat as random effect
-i <- "Shipping_trafficwork_aggregatedregion"
-shiptraff_agg2 <- shiptraff  %>%
+i <- "Shipping_trafficwork_aggregatedregion_no2012"
+shiptraff_agg2 <- shiptraff_sub  %>%
   group_by(subIndustry, year) %>%
   summarise(value=sum(value)) %>%
   mutate(znorm = scale(value, center=TRUE, scale=TRUE) %>% as.vector)
 
-mod12 <- gam(znorm ~ s(year, k=1) + s(subIndustry, bs="re"), data=shiptraff_agg2)
+mod12 <- gam(znorm ~ s(year, k=4) + s(subIndustry, bs="re"), data=shiptraff_agg2, method='REML')
 bestmodplot(i, mod12, shiptraff_agg2, region=FALSE, shipcat=TRUE)
 modelsummaryfun(i, mod12, shiptraff_agg2)
 
@@ -204,9 +201,9 @@ modelsummaryfun(i, mod12, shiptraff_agg2)
 ### Plot all shipping for SI ----
 ##########################
 
-preds1 <- predict(mod1, newdata=shipdist, se=TRUE) 
+preds1 <- predict(mod2, newdata=shipdist, se=TRUE) #no 2012
 preds1 <- bind_cols(shipdist, preds1) %>% mutate(industry="Distance")
-preds9 <- predict(mod9, newdata=shiptraff, se=TRUE) 
+preds9 <- predict(mod10, newdata=shiptraff, se=TRUE) #no 2012
 preds9 <- bind_cols(shiptraff, preds9) %>% mutate(industry="Trafficwork")
 preds_all <- bind_rows(preds1, preds9) 
 
@@ -214,7 +211,7 @@ p <- ggplot(preds_all, aes(x=year, y=znorm, fill=industry, group=industry)) +
   #geom_area(stat='identity', position='identity', alpha=0.5) +
   geom_ribbon(aes(ymin=fit-1.96*se.fit, ymax=fit+1.96*se.fit), alpha=0.5)+
   geom_line(aes(y=fit, col=industry)) +
-  coord_cartesian(xlim=c(2012, 2017), ylim=c(-1.5, 1.5), expand=FALSE) + 
+  coord_cartesian(xlim=c(2013, 2017), ylim=c(-1.5, 1.5), expand=FALSE) + 
   #scale_x_continuous(breaks=seq(2000, 2016, 4)) +
   xlab("Year") + ylab("znorm") +
   theme_minimal(18) +
@@ -231,4 +228,4 @@ p <- ggplot(preds_all, aes(x=year, y=znorm, fill=industry, group=industry)) +
                       byrow = T, # also the guide needs to be reversed
                       reverse = T, label.position = "bottom"))
 
-ggsave(filename=paste0("Arctic_Shipping_Timeseries_distanceandtrafficwork.png"), p, width=10, height=7)
+ggsave(filename=paste0("Arctic_Shipping_Timeseries_distanceandtrafficwork_no2012.png"), p, width=10, height=7)
